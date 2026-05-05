@@ -79,9 +79,96 @@ export function TeacherDashboard() {
   const handlePrint = () => {
     const assignment = assignments.find(a => a.id === assignmentToPrint)
     if (assignment) {
-      console.log('印刷:', printWithAnswers ? '答え含む' : '答え含まない', assignment.title)
-      // TODO: 実際の印刷機能を実装
-      window.print()
+      // 印刷用のウィンドウを開く
+      const printWindow = window.open('', '_blank', 'width=800,height=600')
+      if (!printWindow) {
+        alert('ポップアップがブロックされました。ポップアップを許可してください。')
+        setPrintDialogOpen(false)
+        setAssignmentToPrint(null)
+        return
+      }
+      
+      // 印刷用HTMLを生成
+      const elementsHTML = assignment.elements.map(el => {
+        switch (el.type) {
+          case 'heading':
+            return `<h2 style="font-size: 1.25rem; font-weight: bold; margin-top: 1.5rem; margin-bottom: 0.75rem;">${el.content}</h2>`
+          case 'text':
+            return `<p style="line-height: 1.75;">${el.content}</p>`
+          case 'question-label':
+            return `<p style="font-weight: 500; margin-top: 1rem;">${el.content}</p>`
+          case 'answer-box':
+            const answerDisplay = printWithAnswers && el.answer 
+              ? `<span style="position: absolute; left: 8px; bottom: 2px; color: #dc2626; font-weight: 500;">${el.answer}</span>`
+              : ''
+            return `
+              <div style="display: flex; align-items: center; gap: 12px; margin: 8px 0 8px 16px;">
+                <span style="font-weight: 500; font-size: 0.875rem; border: 1px solid black; border-radius: 4px; padding: 2px 8px;">${el.content}</span>
+                <div style="flex: 1; border-bottom: 1px solid black; min-height: 24px; position: relative;">
+                  ${answerDisplay}
+                </div>
+              </div>
+            `
+          case 'divider':
+            return `<hr style="border-top: 1px solid #9ca3af; margin: 1rem 0;" />`
+          case 'image':
+            if (el.src) {
+              const width = el.size?.width === 'full' ? '100%' : (el.size?.width || 'auto')
+              return `<div style="margin: 1rem 0;"><img src="${el.src}" style="max-width: 100%; width: ${width};" /></div>`
+            }
+            return ''
+          default:
+            return ''
+        }
+      }).join('')
+
+      const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${assignment.title || '課題'} - 印刷</title>
+          <style>
+            @page { size: A4; margin: 15mm; }
+            body {
+              font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+              line-height: 1.6; color: #000; background: #fff; padding: 20px; max-width: 800px; margin: 0 auto;
+            }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <div style="margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h1 style="font-size: 1.5rem; font-weight: bold; margin: 0;">${assignment.title || '無題の課題'}</h1>
+                ${assignment.description ? `<p style="font-size: 0.875rem; margin-top: 0.5rem; color: #4b5563;">${assignment.description}</p>` : ''}
+              </div>
+              <div style="text-align: right;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 0.875rem;">クラス:</span>
+                  <span style="border-bottom: 1px solid #000; min-width: 80px; display: inline-block;">&nbsp;</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                  <span style="font-size: 0.875rem;">名前:</span>
+                  <span style="border-bottom: 1px solid #000; min-width: 120px; display: inline-block;">&nbsp;</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>${elementsHTML}</div>
+          <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #d1d5db; font-size: 0.75rem; color: #6b7280; text-align: center;">
+            ${printWithAnswers ? '【解答付き】' : ''}
+          </div>
+        </body>
+        </html>
+      `
+      
+      printWindow.document.write(printContent)
+      printWindow.document.close()
+      printWindow.onload = () => {
+        printWindow.print()
+      }
     }
     setPrintDialogOpen(false)
     setAssignmentToPrint(null)

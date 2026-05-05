@@ -13,6 +13,7 @@ export type ElementType =
   | 'katakana-marker'
   | 'divider'
   | 'question-label'
+  | 'embed'
 
 // エディター要素
 export interface EditorElement {
@@ -21,11 +22,23 @@ export interface EditorElement {
   content: string
   answer?: string
   importantPoint?: string
+  // 画像/地図/埋め込み用
+  src?: string
+  mapPosition?: { lat: number; lng: number }
+  mapPins?: { lat: number; lng: number; label?: string }[]
+  embedCode?: string
+  // スタイル
   style?: {
     fontSize?: string
     fontWeight?: string
     color?: string
     textAlign?: 'left' | 'center' | 'right'
+  }
+  // サイズ（PDF再現用）
+  size?: {
+    width?: number | 'auto' | 'full'
+    height?: number | 'auto'
+    minHeight?: number
   }
   position?: {
     x: number

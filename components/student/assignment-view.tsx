@@ -209,9 +209,23 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       </motion.header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* センタリング対応：答え非表示時は中央寄せ */}
+        <motion.div 
+          className="flex gap-6"
+          animate={{
+            justifyContent: showAnswers ? 'flex-start' : 'center'
+          }}
+          transition={{ duration: 0.4, ease: 'easeInOut' }}
+        >
           {/* 問題・回答エリア */}
-          <div className="space-y-4">
+          <motion.div 
+            className="space-y-4"
+            animate={{
+              width: showAnswers ? '50%' : '100%',
+              maxWidth: showAnswers ? 'none' : '800px'
+            }}
+            transition={{ duration: 0.4, ease: 'easeInOut' }}
+          >
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -230,18 +244,24 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               <CardContent>
                 <ScrollArea className="h-[600px] pr-4">
                   <div className="space-y-6">
-                    {assignment.elements.map((element, index) => (
-                      <ElementDisplay
-                        key={element.id}
-                        element={element}
-                        index={index}
-                        answer={answers[element.id] || ''}
-                        onAnswerChange={(value) => handleAnswerChange(element.id, value)}
-                        showAnswer={showAnswers}
-                        isSubmitted={isSubmitted && !isOverdue ? false : isSubmitted}
-                        isOverdue={isOverdue}
-                      />
-                    ))}
+                    {assignment.elements.map((element, index) => {
+                      // 対応する回答要素を見つける
+                      const answerIndex = answerElements.findIndex(e => e.id === element.id)
+                      
+                      return (
+                        <ElementDisplay
+                          key={element.id}
+                          element={element}
+                          index={index}
+                          answer={answers[element.id] || ''}
+                          onAnswerChange={(value) => handleAnswerChange(element.id, value)}
+                          showAnswer={showAnswers}
+                          isSubmitted={isSubmitted && !isOverdue ? false : isSubmitted}
+                          isOverdue={isOverdue}
+                          answerNumber={answerIndex !== -1 ? answerIndex + 1 : undefined}
+                        />
+                      )
+                    })}
                   </div>
                 </ScrollArea>
               </CardContent>
@@ -289,58 +309,97 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                 </Button>
               </motion.div>
             )}
-          </div>
+          </motion.div>
 
           {/* 答え表示エリア (答えを見るモード時) */}
           <AnimatePresence>
             {showAnswers && (
               <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 50 }}
+                className="w-1/2"
+                initial={{ opacity: 0, x: 100, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 100, scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               >
-                <Card className="border-answer/30 bg-answer/5">
+                <Card className="border-answer/30 bg-answer/5 sticky top-24">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-answer">
                       <Eye className="w-5 h-5" />
-                      答え
+                      答え一覧
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      答えを参考にしながら入力できます
+                      左の問題と番号で対応しています
                     </p>
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[600px] pr-4">
                       <div className="space-y-4 no-select" style={{ userSelect: 'none' }}>
-                        {answerElements.map((element, index) => (
-                          <motion.div
-                            key={element.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            className="p-4 rounded-xl bg-card border"
-                          >
-                            <div className="flex items-start gap-3">
-                              <Badge variant="outline" className="shrink-0">
-                                {element.content}
-                              </Badge>
-                              <div className="flex-1">
-                                <p 
-                                  className="text-answer font-medium text-lg"
-                                  onCopy={(e) => e.preventDefault()}
-                                  onCut={(e) => e.preventDefault()}
+                        {answerElements.map((element, index) => {
+                          // 対応する回答が入力されているか確認
+                          const userAnswer = answers[element.id] || ''
+                          const isCorrect = userAnswer.trim() === (element.answer || '').trim()
+                          const hasAnswer = userAnswer.trim().length > 0
+                          
+                          return (
+                            <motion.div
+                              key={element.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.05 }}
+                              className={`p-4 rounded-xl border transition-colors ${
+                                hasAnswer 
+                                  ? isCorrect 
+                                    ? 'bg-success/10 border-success/30' 
+                                    : 'bg-destructive/10 border-destructive/30'
+                                  : 'bg-card border-border'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* 番号バッジ */}
+                                <Badge 
+                                  variant="outline" 
+                                  className={`shrink-0 font-bold ${
+                                    hasAnswer 
+                                      ? isCorrect 
+                                        ? 'bg-success/20 text-success border-success' 
+                                        : 'bg-destructive/20 text-destructive border-destructive'
+                                      : 'bg-answer/10 text-answer border-answer'
+                                  }`}
                                 >
-                                  {element.answer}
-                                </p>
-                                {element.importantPoint && (
-                                  <p className="text-sm text-muted-foreground mt-2 p-2 rounded-lg bg-muted/50">
-                                    重要: {element.importantPoint}
+                                  {index + 1}. {element.content}
+                                </Badge>
+                                <div className="flex-1">
+                                  <p 
+                                    className="text-answer font-medium text-lg"
+                                    onCopy={(e) => e.preventDefault()}
+                                    onCut={(e) => e.preventDefault()}
+                                  >
+                                    {element.answer}
                                   </p>
+                                  {hasAnswer && !isCorrect && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      あなたの回答: <span className="text-destructive">{userAnswer}</span>
+                                    </p>
+                                  )}
+                                  {element.importantPoint && (
+                                    <p className="text-sm text-muted-foreground mt-2 p-2 rounded-lg bg-muted/50">
+                                      重要: {element.importantPoint}
+                                    </p>
+                                  )}
+                                </div>
+                                {hasAnswer && (
+                                  <div className="shrink-0">
+                                    {isCorrect ? (
+                                      <Check className="w-5 h-5 text-success" />
+                                    ) : (
+                                      <AlertCircle className="w-5 h-5 text-destructive" />
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          </motion.div>
-                        ))}
+                            </motion.div>
+                          )
+                        })}
                       </div>
                     </ScrollArea>
                   </CardContent>
@@ -348,7 +407,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
       </main>
 
       {/* 答え表示確認ダイアログ */}
@@ -467,7 +526,8 @@ function ElementDisplay({
   onAnswerChange,
   showAnswer,
   isSubmitted,
-  isOverdue
+  isOverdue,
+  answerNumber
 }: {
   element: NonNullable<ReturnType<typeof useAppStore>['assignments'][0]>['elements'][0]
   index: number
@@ -476,6 +536,7 @@ function ElementDisplay({
   showAnswer: boolean
   isSubmitted: boolean
   isOverdue: boolean
+  answerNumber?: number
 }) {
   const canEdit = !isSubmitted || !isOverdue
 
@@ -525,8 +586,29 @@ function ElementDisplay({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
-          className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border"
+          className={`flex items-center gap-3 p-4 rounded-xl border transition-colors ${
+            showAnswer && hasAnswer
+              ? isCorrect
+                ? 'bg-success/10 border-success/30'
+                : 'bg-destructive/10 border-destructive/30'
+              : 'bg-muted/30 border-border'
+          }`}
         >
+          {/* 番号表示 */}
+          {showAnswer && answerNumber && (
+            <Badge 
+              variant="secondary" 
+              className={`shrink-0 font-bold ${
+                hasAnswer 
+                  ? isCorrect 
+                    ? 'bg-success/20 text-success' 
+                    : 'bg-destructive/20 text-destructive'
+                  : 'bg-primary/20 text-primary'
+              }`}
+            >
+              {answerNumber}
+            </Badge>
+          )}
           <Badge variant="outline" className="shrink-0 bg-card">
             {element.content}
           </Badge>
