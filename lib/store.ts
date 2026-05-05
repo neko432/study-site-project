@@ -52,6 +52,14 @@ interface AppState {
   // 提出管理
   addSubmission: (submission: StudentSubmission) => void
   updateSubmission: (id: string, submission: Partial<StudentSubmission>) => void
+  
+  // 進捗保存
+  studentProgress: Record<string, Record<string, string>> // assignmentId -> { elementId: answer }
+  saveProgress: (assignmentId: string, answers: Record<string, string>) => void
+  getProgress: (assignmentId: string) => Record<string, string>
+  
+  // 生徒設定
+  updateStudentInfo: (name: string, studentClass: string) => void
 }
 
 // サンプル課題データ
@@ -172,6 +180,7 @@ export const useAppStore = create<AppState>()(
       currentStudentId: 'student-1',
       studentName: '',
       studentClass: '',
+      studentProgress: {},
       
       // 認証アクション
       setRole: (role) => set({ role }),
@@ -231,7 +240,28 @@ export const useAppStore = create<AppState>()(
           submissions: state.submissions.map((s) =>
             s.id === id ? { ...s, ...updates } : s
           )
-        }))
+        })),
+      
+      // 進捗保存
+      saveProgress: (assignmentId, answers) =>
+        set((state) => ({
+          studentProgress: {
+            ...state.studentProgress,
+            [assignmentId]: answers
+          }
+        })),
+      getProgress: (assignmentId) => {
+        const state = useAppStore.getState()
+        return state.studentProgress[assignmentId] || {}
+      },
+      
+      // 生徒設定更新
+      updateStudentInfo: (name, studentClass) =>
+        set({
+          studentName: name,
+          studentClass,
+          currentStudentId: `${studentClass}-${name}`
+        })
     }),
     {
       name: 'learning-site-storage',
@@ -245,14 +275,16 @@ export const useAppStore = create<AppState>()(
               templates: state.templates,
               submissions: state.submissions,
               studentName: state.studentName,
-              studentClass: state.studentClass
+              studentClass: state.studentClass,
+              studentProgress: state.studentProgress
             }
           : {
               assignments: state.assignments,
               templates: state.templates,
               submissions: state.submissions,
               studentName: state.studentName,
-              studentClass: state.studentClass
+              studentClass: state.studentClass,
+              studentProgress: state.studentProgress
             }
     }
   )

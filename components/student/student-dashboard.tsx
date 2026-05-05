@@ -10,21 +10,42 @@ import {
   Calendar,
   FileText,
   ChevronRight,
-  Filter
+  Filter,
+  Settings,
+  User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { useAppStore } from '@/lib/store'
 import { AssignmentView } from './assignment-view'
 import { format, isPast, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 export function StudentDashboard() {
-  const { logout, assignments, submissions, currentStudentId } = useAppStore()
+  const { logout, assignments, submissions, currentStudentId, studentName, studentClass, updateStudentInfo } = useAppStore()
   const [selectedAssignment, setSelectedAssignment] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'incomplete' | 'completed'>('all')
+  const [showSettings, setShowSettings] = useState(false)
+  const [editName, setEditName] = useState(studentName)
+  const [editClass, setEditClass] = useState(studentClass)
 
   // 公開中の課題のみ表示
   const publishedAssignments = assignments.filter(a => a.status === 'published')
@@ -82,10 +103,19 @@ export function StudentDashboard() {
               {completedCount}/{publishedAssignments.length} 完了
             </Badge>
           </div>
-          <Button variant="ghost" onClick={logout} className="gap-2">
-            <LogOut className="w-4 h-4" />
-            ログアウト
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => {
+              setEditName(studentName)
+              setEditClass(studentClass)
+              setShowSettings(true)
+            }}>
+              <Settings className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" onClick={logout} className="gap-2">
+              <LogOut className="w-4 h-4" />
+              ログアウト
+            </Button>
+          </div>
         </div>
       </motion.header>
 
@@ -208,6 +238,55 @@ export function StudentDashboard() {
           </AnimatePresence>
         </Tabs>
       </main>
+
+      {/* 設定ダイアログ */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5 text-primary" />
+              生徒設定
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-class">クラス</Label>
+              <Select value={editClass} onValueChange={setEditClass}>
+                <SelectTrigger>
+                  <SelectValue placeholder="クラスを選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1組</SelectItem>
+                  <SelectItem value="2">2組</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">名前</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="名前を入力"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettings(false)}>
+              キャンセル
+            </Button>
+            <Button 
+              onClick={() => {
+                updateStudentInfo(editName, editClass)
+                setShowSettings(false)
+              }}
+              disabled={!editName.trim() || !editClass}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

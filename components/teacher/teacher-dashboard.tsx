@@ -31,6 +31,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/lib/store'
 import { AssignmentEditor } from './assignment-editor'
 import { SubmissionViewer } from './submission-viewer'
@@ -44,6 +53,9 @@ export function TeacherDashboard() {
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [assignmentToPrint, setAssignmentToPrint] = useState<string | null>(null)
+  const [printWithAnswers, setPrintWithAnswers] = useState(true)
 
   const handleDeleteClick = (assignmentId: string) => {
     setAssignmentToDelete(assignmentId)
@@ -58,11 +70,76 @@ export function TeacherDashboard() {
     setAssignmentToDelete(null)
   }
 
-  const handlePrint = (assignmentId: string) => {
-    const assignment = assignments.find(a => a.id === assignmentId)
+  const handlePrintClick = (assignmentId: string) => {
+    setAssignmentToPrint(assignmentId)
+    setPrintDialogOpen(true)
+  }
+
+  const handlePrint = () => {
+    const assignment = assignments.find(a => a.id === assignmentToPrint)
     if (assignment) {
-      window.print()
+      // Create printable content
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
+        
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${assignment.title}</title>
+            <style>
+              body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+              h1 { font-size: 24px; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+              .description { color: #666; margin-bottom: 24px; }
+              .element { margin-bottom: 16px; }
+              .heading { font-size: 20px; font-weight: bold; margin-top: 24px; }
+              .text { line-height: 1.8; }
+              .question-label { font-weight: bold; margin-top: 20px; }
+              .answer-box { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; margin: 8px 0; }
+              .answer-label { background: #e0e0e0; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+              .answer-input { flex: 1; border-bottom: 1px solid #999; min-width: 150px; padding: 4px 0; }
+              .answer-text { color: #d32f2f; font-weight: bold; }
+              .divider { border-top: 1px solid #ccc; margin: 24px 0; }
+              .deadline { color: #666; font-size: 14px; margin-top: 24px; }
+              @media print { body { padding: 20px; } }
+            </style>
+          </head>
+          <body>
+            <h1>${assignment.title}</h1>
+            <p class="description">${assignment.description}</p>
+            ${assignment.elements.map(el => {
+              switch(el.type) {
+                case 'heading':
+                  return `<div class="element heading">${el.content}</div>`
+                case 'text':
+                  return `<div class="element text">${el.content}</div>`
+                case 'question-label':
+                  return `<div class="element question-label">${el.content}</div>`
+                case 'answer-box':
+                  return `<div class="element answer-box">
+                    <span class="answer-label">${el.content}</span>
+                    ${printWithAnswers 
+                      ? `<span class="answer-text">${el.answer || ''}</span>` 
+                      : '<span class="answer-input"></span>'
+                    }
+                  </div>`
+                case 'divider':
+                  return '<div class="divider"></div>'
+                default:
+                  return ''
+              }
+            }).join('')}
+            <p class="deadline">提出期限: ${format(new Date(assignment.deadline), 'yyyy年M月d日 HH:mm', { locale: ja })}</p>
+          </body>
+          </html>
+        `)
+        printWindow.document.close()
+        printWindow.print()
+      }
     }
+    setPrintDialogOpen(false)
+    setAssignmentToPrint(null)
   }
 
   const publishedAssignments = assignments.filter(a => a.status === 'published')
@@ -176,7 +253,10 @@ export function TeacherDashboard() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
+                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => setEditingAssignment(assignment.id)}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
                     >
                       <div>
                         <p className="font-medium text-foreground">{assignment.title}</p>
@@ -333,7 +413,7 @@ export function TeacherDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handlePrint(assignment.id)}
+                            onClick={() => handlePrintClick(assignment.id)}
                           >
                             <Printer className="w-4 h-4" />
                           </Button>
@@ -527,6 +607,39 @@ export function TeacherDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 印刷オプションダイアログ */}
+      <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>印刷オプション</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="print-answers"
+                checked={printWithAnswers}
+                onCheckedChange={(checked) => setPrintWithAnswers(checked as boolean)}
+              />
+              <Label htmlFor="print-answers">答えを含めて印刷する</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {printWithAnswers 
+                ? '解答欄に正解が表示されます。' 
+                : '解答欄は空欄のままになります。生徒への配布用に適しています。'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              印刷
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

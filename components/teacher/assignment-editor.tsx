@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import {
   ArrowLeft,
@@ -21,8 +21,14 @@ import {
   X,
   Copy,
   Check,
-  Clock
+  Clock,
+  Undo2,
+  Redo2,
+  Code,
+  Settings
 } from 'lucide-react'
+import { useHistory } from '@/hooks/use-history'
+import { MapEditor } from '@/components/map-editor'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -69,6 +75,7 @@ const ELEMENT_TYPES: { type: ElementType; icon: React.ReactNode; label: string }
   { type: 'divider', icon: <Minus className="w-4 h-4" />, label: '区切り線' },
   { type: 'image', icon: <Image className="w-4 h-4" />, label: '画像' },
   { type: 'map', icon: <Map className="w-4 h-4" />, label: '地図' },
+  { type: 'embed', icon: <Code className="w-4 h-4" />, label: '埋め込み' },
 ]
 
 export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps) {
@@ -79,9 +86,20 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
 
   const [title, setTitle] = useState(existingAssignment?.title || '')
   const [description, setDescription] = useState(existingAssignment?.description || '')
-  const [elements, setElements] = useState<EditorElement[]>(
+  
+  // Use history hook for undo/redo
+  const {
+    state: elements,
+    set: setElements,
+    setWithoutHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo
+  } = useHistory<EditorElement[]>(
     existingAssignment?.elements || (assignmentId === 'template-history' ? getHistoryTemplate() : [])
   )
+
   const [deadline, setDeadline] = useState<Date>(
     existingAssignment?.deadline ? new Date(existingAssignment.deadline) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   )
@@ -93,52 +111,97 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [showPrintDialog, setShowPrintDialog] = useState(false)
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false)
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false)
+  const [showMapDialog, setShowMapDialog] = useState(false)
+  const [editingMapElementId, setEditingMapElementId] = useState<string | null>(null)
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
   const [templateName, setTemplateName] = useState('')
+  
+  const canvasRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          redo()
+        } else {
+          undo()
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo])
 
   const generateId = () => `element-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
-  const addElement = useCallback((type: ElementType) => {
+  const addElement = useCallback((type: ElementType, insertAtIndex?: number) => {
     const newElement: EditorElement = {
       id: generateId(),
       type,
       content: getDefaultContent(type, katakanaIndex),
-      ...(type === 'answer-box' && { answer: '', importantPoint: '' })
+      ...(type === 'answer-box' && { answer: '', importantPoint: '' }),
+      ...(type === 'embed' && { embedCode: '' }),
+      ...(type === 'map' && { mapData: { lat: 35.6762, lng: 139.6503, zoom: 10, markers: [] } })
     }
     
-    if (type === 'katakana-marker') {
+    if (type === 'katakana-marker' || type === 'answer-box') {
       setKatakanaIndex(prev => (prev + 1) % KATAKANA_MARKERS.length)
     }
     
-    setElements(prev => [...prev, newElement])
+    setElements(prev => {
+      if (insertAtIndex !== undefined) {
+        return [...prev.slice(0, insertAtIndex), newElement, ...prev.slice(insertAtIndex)]
+      }
+      return [...prev, newElement]
+    })
     setSelectedElement(newElement.id)
-  }, [katakanaIndex])
 
-  const updateElement = useCallback((id: string, updates: Partial<EditorElement>) => {
-    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el))
-  }, [])
+    // Auto-scroll to new element
+    setTimeout(() => {
+      const element = document.getElementById(`element-${newElement.id}`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 100)
+  }, [katakanaIndex, setElements])
+
+  const updateElement = useCallback((id: string, updates: Partial<EditorElement>, addToHistory = true) => {
+    const setter = addToHistory ? setElements : setWithoutHistory
+    setter(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el))
+  }, [setElements, setWithoutHistory])
 
   const deleteElement = useCallback((id: string) => {
     setElements(prev => prev.filter(el => el.id !== id))
     if (selectedElement === id) {
       setSelectedElement(null)
     }
-  }, [selectedElement])
+  }, [selectedElement, setElements])
 
   const duplicateElement = useCallback((id: string) => {
-    const element = elements.find(el => el.id === id)
-    if (element) {
-      const newElement = { ...element, id: generateId() }
-      const index = elements.findIndex(el => el.id === id)
-      setElements(prev => [
-        ...prev.slice(0, index + 1),
-        newElement,
-        ...prev.slice(index + 1)
-      ])
-    }
-  }, [elements])
+    setElements(prev => {
+      const element = prev.find(el => el.id === id)
+      if (element) {
+        const newElement = { ...element, id: generateId() }
+        const index = prev.findIndex(el => el.id === id)
+        return [
+          ...prev.slice(0, index + 1),
+          newElement,
+          ...prev.slice(index + 1)
+        ]
+      }
+      return prev
+    })
+  }, [setElements])
 
   const handlePublish = () => {
     const assignmentData = {
@@ -224,8 +287,62 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   }
 
   const handlePrint = () => {
-    // TODO: 実際の印刷機能を実装
-    console.log('印刷:', printWithAnswers ? '答え含む' : '答え含まない')
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${title || '無題の課題'}</title>
+          <style>
+            body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            h1 { font-size: 24px; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+            .description { color: #666; margin-bottom: 24px; }
+            .element { margin-bottom: 16px; }
+            .heading { font-size: 20px; font-weight: bold; margin-top: 24px; }
+            .text { line-height: 1.8; }
+            .question-label { font-weight: bold; margin-top: 20px; }
+            .answer-box { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f5f5f5; border-radius: 8px; margin: 8px 0; }
+            .answer-label { background: #e0e0e0; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+            .answer-input { flex: 1; border-bottom: 1px solid #999; min-width: 150px; padding: 4px 0; }
+            .answer-text { color: #d32f2f; font-weight: bold; }
+            .divider { border-top: 1px solid #ccc; margin: 24px 0; }
+            .deadline { color: #666; font-size: 14px; margin-top: 24px; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          <h1>${title || '無題の課題'}</h1>
+          <p class="description">${description}</p>
+          ${elements.map(el => {
+            switch(el.type) {
+              case 'heading':
+                return `<div class="element heading">${el.content}</div>`
+              case 'text':
+                return `<div class="element text">${el.content}</div>`
+              case 'question-label':
+                return `<div class="element question-label">${el.content}</div>`
+              case 'answer-box':
+                return `<div class="element answer-box">
+                  <span class="answer-label">${el.content}</span>
+                  ${printWithAnswers 
+                    ? `<span class="answer-text">${el.answer || ''}</span>` 
+                    : '<span class="answer-input"></span>'
+                  }
+                </div>`
+              case 'divider':
+                return '<div class="divider"></div>'
+              default:
+                return ''
+            }
+          }).join('')}
+          <p class="deadline">提出期限: ${format(deadline, 'yyyy年M月d日 HH:mm', { locale: ja })}</p>
+        </body>
+        </html>
+      `)
+      printWindow.document.close()
+      printWindow.print()
+    }
     setShowPrintDialog(false)
   }
 
@@ -250,6 +367,28 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             />
           </div>
           <div className="flex items-center gap-2">
+            {/* Undo/Redo buttons */}
+            <div className="flex items-center gap-1 mr-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={undo}
+                disabled={!canUndo}
+                title="元に戻す (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={redo}
+                disabled={!canRedo}
+                title="やり直す (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="w-4 h-4" />
+              </Button>
+            </div>
+            
             <Button variant="outline" onClick={() => setShowPrintDialog(true)}>
               <Printer className="w-4 h-4 mr-2" />
               印刷
@@ -342,6 +481,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                         key={element.id}
                         value={element}
                         className="relative"
+                        id={`element-${element.id}`}
                       >
                         <motion.div
                           layout
@@ -366,6 +506,10 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                               element={element}
                               onUpdate={(updates) => updateElement(element.id, updates)}
                               isSelected={selectedElement === element.id}
+                              onOpenMapEditor={() => {
+                                setEditingMapElementId(element.id)
+                                setShowMapDialog(true)
+                              }}
                             />
                           </div>
 
@@ -616,6 +760,28 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 地図エディターダイアログ */}
+      {editingMapElementId && (
+        <MapEditor
+          open={showMapDialog}
+          onOpenChange={(open) => {
+            setShowMapDialog(open)
+            if (!open) setEditingMapElementId(null)
+          }}
+          mapData={
+            elements.find(e => e.id === editingMapElementId)?.mapData || {
+              lat: 35.6762,
+              lng: 139.6503,
+              zoom: 10,
+              markers: []
+            }
+          }
+          onSave={(data) => {
+            updateElement(editingMapElementId, { mapData: data })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -623,12 +789,37 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
 function ElementRenderer({
   element,
   onUpdate,
-  isSelected
+  isSelected,
+  onOpenMapEditor
 }: {
   element: EditorElement
   onUpdate: (updates: Partial<EditorElement>) => void
   isSelected: boolean
+  onOpenMapEditor?: () => void
 }) {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        onUpdate({ imageUrl: event.target?.result as string })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        onUpdate({ imageUrl: event.target?.result as string })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   switch (element.type) {
     case 'heading':
       return (
@@ -681,7 +872,7 @@ function ElementRenderer({
     case 'katakana-marker':
       return (
         <div className="flex items-center gap-2">
-          <span className="text-lg font-medium">（　{element.content}　）</span>
+          <span className="text-lg font-medium">{'\uff08\u3000'}{element.content}{'\u3000\uff09'}</span>
         </div>
       )
     
@@ -690,21 +881,93 @@ function ElementRenderer({
     
     case 'image':
       return (
-        <div className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed">
-          <div className="text-center">
-            <Image className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">画像をアップロード</p>
-          </div>
+        <div
+          className={`relative ${
+            element.imageUrl 
+              ? 'overflow-hidden rounded-lg' 
+              : 'flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed cursor-pointer hover:border-primary transition-colors'
+          }`}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleImageDrop}
+          style={element.size ? { width: element.size.width, height: element.size.height } : undefined}
+        >
+          {element.imageUrl ? (
+            <div className="relative group">
+              <img 
+                src={element.imageUrl} 
+                alt="Uploaded" 
+                className="max-w-full h-auto rounded-lg"
+                style={element.size ? { width: element.size.width, height: element.size.height, objectFit: 'cover' } : undefined}
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <div className="px-3 py-1.5 bg-white rounded-lg text-sm font-medium">
+                    画像を変更
+                  </div>
+                </label>
+              </div>
+            </div>
+          ) : (
+            <label className="cursor-pointer text-center w-full h-full flex flex-col items-center justify-center">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <Image className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">クリックまたはドラッグで画像をアップロード</p>
+            </label>
+          )}
         </div>
       )
     
     case 'map':
       return (
-        <div className="flex items-center justify-center h-48 bg-muted rounded-lg border-2 border-dashed">
-          <div className="text-center">
-            <Map className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">地図を追加</p>
-          </div>
+        <div 
+          className="h-48 bg-muted rounded-lg border-2 border-dashed cursor-pointer hover:border-primary transition-colors flex items-center justify-center"
+          onClick={onOpenMapEditor}
+        >
+          {element.mapData && element.mapData.markers.length > 0 ? (
+            <div className="w-full h-full p-2">
+              <div className="w-full h-full bg-primary/10 rounded-lg flex flex-col items-center justify-center">
+                <Map className="w-8 h-8 text-primary mb-2" />
+                <p className="text-sm text-foreground font-medium">
+                  {element.mapData.markers.length}個のピンが設定されています
+                </p>
+                <p className="text-xs text-muted-foreground">クリックして編集</p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <Map className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">クリックして地図を追加</p>
+            </div>
+          )}
+        </div>
+      )
+    
+    case 'embed':
+      return (
+        <div className="space-y-2">
+          <Textarea
+            value={element.embedCode || ''}
+            onChange={(e) => onUpdate({ embedCode: e.target.value })}
+            className="font-mono text-sm min-h-[80px]"
+            placeholder="HTMLコードを入力してください..."
+          />
+          {element.embedCode && (
+            <div 
+              className="p-4 border rounded-lg bg-muted/30"
+              dangerouslySetInnerHTML={{ __html: element.embedCode }}
+            />
+          )}
         </div>
       )
     
