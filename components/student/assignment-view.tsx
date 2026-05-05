@@ -280,9 +280,23 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       </motion.header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div 
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          layout
+          initial={false}
+          animate={{
+            gridTemplateColumns: showAnswers ? '1fr 1fr' : '1fr',
+            maxWidth: showAnswers ? '100%' : '800px',
+            margin: showAnswers ? '0' : '0 auto'
+          }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+        >
           {/* 問題・回答エリア */}
-          <div className="space-y-4">
+          <motion.div 
+            className="space-y-4"
+            layout
+            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+          >
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -437,7 +451,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               答えを表示しますか?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              答えを見ながら回答を確認できます。自分で考えてから見ることをお���すめします。
+              答えを見ながら回答を確認できます。自分で考えてから見ることをお����すめします。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

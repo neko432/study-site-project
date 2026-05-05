@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowLeft, User, Clock, History, Check, X, Eye } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, User, Clock, History, Check, X, Eye, Users, Filter, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,8 +14,20 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from '@/components/ui/collapsible'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { useAppStore } from '@/lib/store'
-import type { Assignment, Submission } from '@/lib/types'
+import type { Assignment, StudentSubmission } from '@/lib/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -25,12 +37,42 @@ interface SubmissionViewerProps {
 }
 
 export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps) {
-  const { assignments, submissions } = useAppStore() as { assignments: Assignment[]; submissions: Submission[] }
+  const { assignments, submissions } = useAppStore() as { assignments: Assignment[]; submissions: StudentSubmission[] }
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [selectedClass, setSelectedClass] = useState<string>('all')
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set(['all']))
 
   const assignment = assignments.find(a => a.id === assignmentId)
   const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId)
+  
+  // Group submissions by class
+  const submissionsByClass = assignmentSubmissions.reduce((acc, submission) => {
+    const classKey = submission.studentClass || 'その他'
+    if (!acc[classKey]) {
+      acc[classKey] = []
+    }
+    acc[classKey].push(submission)
+    return acc
+  }, {} as Record<string, StudentSubmission[]>)
+  
+  // Get unique classes
+  const classes = Object.keys(submissionsByClass).sort()
+  
+  // Filter submissions based on selected class
+  const filteredSubmissions = selectedClass === 'all' 
+    ? assignmentSubmissions 
+    : submissionsByClass[selectedClass] || []
+
+  const toggleClassExpanded = (classKey: string) => {
+    const newExpanded = new Set(expandedClasses)
+    if (newExpanded.has(classKey)) {
+      newExpanded.delete(classKey)
+    } else {
+      newExpanded.add(classKey)
+    }
+    setExpandedClasses(newExpanded)
+  }
 
   if (!assignment) {
     return (
@@ -70,61 +112,95 @@ export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps
           {/* 提出一覧 */}
           <div className="lg:col-span-1">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  提出者一覧
-                </CardTitle>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    提出者一覧
+                  </CardTitle>
+                  <Badge variant="secondary">{assignmentSubmissions.length}件</Badge>
+                </div>
+                
+                {/* Class Filter */}
+                {classes.length > 0 && (
+                  <div className="mt-3">
+                    <Select value={selectedClass} onValueChange={setSelectedClass}>
+                      <SelectTrigger className="w-full">
+                        <Filter className="w-4 h-4 mr-2" />
+                        <SelectValue placeholder="クラスで絞り込み" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">すべてのクラス</SelectItem>
+                        {classes.map(cls => (
+                          <SelectItem key={cls} value={cls}>
+                            {cls}組 ({submissionsByClass[cls]?.length || 0}件)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[500px]">
-                  <div className="space-y-2">
-                    {assignmentSubmissions.length > 0 ? (
-                      assignmentSubmissions.map((submission, index) => (
-                        <motion.button
-                          key={submission.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className={`w-full p-4 rounded-xl text-left transition-colors ${
-                            selectedSubmission === submission.id
-                              ? 'bg-primary/10 border-2 border-primary'
-                              : 'bg-muted/50 hover:bg-muted border-2 border-transparent'
-                          }`}
-                          onClick={() => setSelectedSubmission(submission.id)}
+                  {selectedClass === 'all' && classes.length > 0 ? (
+                    // Grouped by class view
+                    <div className="space-y-4">
+                      {classes.map(cls => (
+                        <Collapsible
+                          key={cls}
+                          open={expandedClasses.has(cls)}
+                          onOpenChange={() => toggleClassExpanded(cls)}
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-foreground">
-                                {submission.studentName}
-                              </p>
-                              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {format(new Date(submission.submittedAt), 'M月d日 HH:mm', { locale: ja })}
-                              </p>
-                            </div>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                             <div className="flex items-center gap-2">
-                              {submission.history.length > 1 && (
-                                <Badge variant="outline" className="text-xs">
-                                  {submission.history.length}回
-                                </Badge>
-                              )}
-                              <Badge
-                                variant={submission.status === 'submitted' ? 'default' : 'secondary'}
-                              >
-                                {submission.status === 'submitted' ? '提出済' : '作業中'}
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              <span className="font-medium">{cls}組</span>
+                              <Badge variant="outline" className="text-xs">
+                                {submissionsByClass[cls]?.length || 0}
                               </Badge>
                             </div>
-                          </div>
-                        </motion.button>
-                      ))
-                    ) : (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>まだ提出がありません</p>
-                      </div>
-                    )}
-                  </div>
+                            <ChevronDown className={`w-4 h-4 transition-transform ${expandedClasses.has(cls) ? 'rotate-180' : ''}`} />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="space-y-2 mt-2 pl-2">
+                              <AnimatePresence>
+                                {submissionsByClass[cls]?.map((submission, index) => (
+                                  <SubmissionListItem
+                                    key={submission.id}
+                                    submission={submission}
+                                    index={index}
+                                    isSelected={selectedSubmission === submission.id}
+                                    onSelect={() => setSelectedSubmission(submission.id)}
+                                  />
+                                ))}
+                              </AnimatePresence>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      ))}
+                    </div>
+                  ) : (
+                    // Flat list view (filtered or no classes)
+                    <div className="space-y-2">
+                      {filteredSubmissions.length > 0 ? (
+                        filteredSubmissions.map((submission, index) => (
+                          <SubmissionListItem
+                            key={submission.id}
+                            submission={submission}
+                            index={index}
+                            isSelected={selectedSubmission === submission.id}
+                            onSelect={() => setSelectedSubmission(submission.id)}
+                          />
+                        ))
+                      ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>まだ提出がありません</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </ScrollArea>
               </CardContent>
             </Card>
@@ -310,6 +386,63 @@ function SubmissionDetail({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function SubmissionListItem({
+  submission,
+  index,
+  isSelected,
+  onSelect
+}: {
+  submission: StudentSubmission
+  index: number
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className={`w-full p-4 rounded-xl text-left transition-colors ${
+        isSelected
+          ? 'bg-primary/10 border-2 border-primary'
+          : 'bg-muted/50 hover:bg-muted border-2 border-transparent'
+      }`}
+      onClick={onSelect}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-foreground">
+              {submission.studentName}
+            </p>
+            {submission.studentClass && (
+              <Badge variant="outline" className="text-xs">
+                {submission.studentClass}組
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+            <Clock className="w-3 h-3" />
+            {format(new Date(submission.submittedAt), 'M月d日 HH:mm', { locale: ja })}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {submission.history.length > 1 && (
+            <Badge variant="outline" className="text-xs">
+              {submission.history.length}回
+            </Badge>
+          )}
+          <Badge
+            variant={submission.status === 'submitted' ? 'default' : 'secondary'}
+          >
+            {submission.status === 'submitted' ? '提出済' : '作業中'}
+          </Badge>
+        </div>
+      </div>
+    </motion.button>
   )
 }
 

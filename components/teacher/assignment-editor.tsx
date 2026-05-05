@@ -60,6 +60,11 @@ import { useAppStore } from '@/lib/store'
 import { KATAKANA_MARKERS, type EditorElement, type ElementType } from '@/lib/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { RichDateTimePicker } from '@/components/ui/rich-datetime-picker'
+import { PrintPreview } from './print-preview'
+import { GoogleMapPicker, GoogleMapDisplay } from './google-map-picker'
+import { ElementResizeHandles } from './element-resize-handles'
+import DOMPurify from 'dompurify'
 
 interface AssignmentEditorProps {
   assignmentId: string
@@ -103,6 +108,13 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
   const [templateName, setTemplateName] = useState('')
+  const [showMapPicker, setShowMapPicker] = useState(false)
+  const [mapPickerElementId, setMapPickerElementId] = useState<string | null>(null)
+  const [showAnswerSelectionDialog, setShowAnswerSelectionDialog] = useState(false)
+  const [pendingElementType, setPendingElementType] = useState<ElementType | null>(null)
+  const [selectedQuestionNumber, setSelectedQuestionNumber] = useState('')
+  const [selectedAnswerSlot, setSelectedAnswerSlot] = useState('')
+  const printRef = useRef<HTMLDivElement>(null)
   
   // Undo/Redo 履歴
   const [history, setHistory] = useState<EditorElement[][]>([existingAssignment?.elements || []])
@@ -146,15 +158,17 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const canUndo = historyIndex > 0
   const canRedo = historyIndex < history.length - 1
 
-  const addElement = useCallback((type: ElementType) => {
+  const addElement = useCallback((type: ElementType, questionNumber?: string, answerSlot?: string) => {
     const newElement: EditorElement = {
       id: generateId(),
       type,
-      content: getDefaultContent(type, katakanaIndex),
+      content: type === 'answer-box' && answerSlot ? answerSlot : getDefaultContent(type, katakanaIndex),
       ...(type === 'answer-box' && { answer: '', importantPoint: '' }),
       ...(type === 'image' && { imageUrl: '' }),
       ...(type === 'map' && { mapPins: [] }),
-      ...(type === 'embed' && { embedHtml: '' })
+      ...(type === 'embed' && { embedHtml: '' }),
+      ...(questionNumber && { questionNumber }),
+      ...(answerSlot && { answerSlot })
     }
     
     if (type === 'katakana-marker') {
@@ -167,6 +181,27 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
     setSelectedElement(newElement.id)
     lastAddedElementRef.current = newElement.id
   }, [katakanaIndex, elements, saveToHistory])
+
+  // Handle adding element with selection dialog for answer boxes
+  const handleAddElement = useCallback((type: ElementType) => {
+    if (type === 'answer-box') {
+      setPendingElementType(type)
+      setShowAnswerSelectionDialog(true)
+    } else {
+      addElement(type)
+    }
+  }, [addElement])
+
+  const confirmAddAnswerElement = () => {
+    if (pendingElementType) {
+      addElement(pendingElementType, selectedQuestionNumber, selectedAnswerSlot || KATAKANA_MARKERS[katakanaIndex])
+      setKatakanaIndex(prev => (prev + 1) % KATAKANA_MARKERS.length)
+    }
+    setShowAnswerSelectionDialog(false)
+    setPendingElementType(null)
+    setSelectedQuestionNumber('')
+    setSelectedAnswerSlot('')
+  }
 
   // 自動スクロール
   useEffect(() => {
@@ -307,8 +342,102 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   }
 
   const handlePrint = () => {
-    // TODO: 実際の印刷機能を実装
-    console.log('印刷:', printWithAnswers ? '答え含む' : '答え含まない')
+    // Create print window with the print preview content
+    const printWindow = window.open('', '_blank', 'width=800,height=600')
+    if (!printWindow) return
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title || '課題'} - 印刷</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 20mm; }
+          .header { border-bottom: 2px solid black; padding-bottom: 16px; margin-bottom: 24px; }
+          h1 { font-size: 24px; text-align: center; margin-bottom: 8px; }
+          .description { font-size: 14px; color: #666; text-align: center; }
+          .info-row { display: flex; justify-content: space-between; margin-top: 16px; font-size: 14px; }
+          .content { }
+          .heading { font-size: 20px; font-weight: bold; margin: 16px 0 8px; }
+          .text { line-height: 1.8; margin: 8px 0; }
+          .question-label { font-weight: 500; margin: 16px 0 8px; }
+          .answer-box { display: flex; align-items: center; gap: 8px; margin: 8px 0 8px 16px; }
+          .answer-label { font-weight: 500; }
+          .answer-blank { border-bottom: 1px solid black; min-width: 150px; display: inline-block; }
+          .answer-text { color: #dc2626; font-weight: 500; border-bottom: 1px solid #dc2626; padding: 0 8px; }
+          .divider { border-top: 1px solid #ccc; margin: 16px 0; }
+          .page-break { page-break-before: always; margin-top: 32px; padding-top: 32px; border-top: 2px solid black; }
+          .answer-key h2 { font-size: 18px; font-weight: bold; margin-bottom: 16px; }
+          .answer-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+          .answer-item { display: flex; gap: 8px; }
+          @media print {
+            body { padding: 10mm; }
+            .answer-text { color: #dc2626 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${title || '無題の課題'}</h1>
+          ${description ? `<p class="description">${description}</p>` : ''}
+          <div class="info-row">
+            <span>名前: ____________________</span>
+            <span>クラス: ________</span>
+          </div>
+        </div>
+        <div class="content">
+          ${elements.map(el => {
+            switch (el.type) {
+              case 'heading':
+                return `<div class="heading">${el.content}</div>`
+              case 'text':
+                return `<div class="text">${el.content}</div>`
+              case 'question-label':
+                return `<div class="question-label">${el.content}</div>`
+              case 'answer-box':
+                return `<div class="answer-box">
+                  <span class="answer-label">(${el.content})</span>
+                  ${printWithAnswers 
+                    ? `<span class="answer-text">${el.answer || ''}</span>`
+                    : `<span class="answer-blank">&nbsp;</span>`
+                  }
+                </div>`
+              case 'divider':
+                return `<div class="divider"></div>`
+              case 'image':
+                return el.imageUrl ? `<img src="${el.imageUrl}" style="max-width: ${el.style?.width || 100}%; margin: 8px 0;" />` : ''
+              default:
+                return ''
+            }
+          }).join('')}
+        </div>
+        ${printWithAnswers ? `
+          <div class="page-break answer-key">
+            <h2>解答</h2>
+            <div class="answer-grid">
+              ${elements.filter(e => e.type === 'answer-box').map(el => 
+                `<div class="answer-item">
+                  <span>${el.content}:</span>
+                  <span class="answer-text">${el.answer || ''}</span>
+                </div>`
+              ).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </body>
+      </html>
+    `
+
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+    printWindow.focus()
+    
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 250)
+    
     setShowPrintDialog(false)
   }
 
@@ -393,7 +522,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                   <Button
                     variant="outline"
                     className="w-full justify-start gap-3 h-10 cursor-grab active:cursor-grabbing"
-                    onClick={() => addElement(item.type)}
+                    onClick={() => handleAddElement(item.type)}
                     draggable
                     onDragStart={(e) => {
                       setIsDraggingElement(true)
@@ -448,7 +577,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 e.preventDefault()
                 const elementType = e.dataTransfer.getData('elementType') as ElementType
                 if (elementType) {
-                  addElement(elementType)
+                  handleAddElement(elementType)
                 }
                 setIsDraggingElement(false)
                 setDraggedElementType(null)
@@ -457,7 +586,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
               {elements.length === 0 ? (
                 <div className={`flex flex-col items-center justify-center h-96 text-muted-foreground rounded-xl transition-colors ${isDraggingElement ? 'bg-primary/5' : ''}`}>
                   <Plus className="w-12 h-12 mb-4" />
-                  <p>{isDraggingElement ? 'ここにドロップして追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
+                  <p>{isDraggingElement ? 'ここにドロップし��追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
                 </div>
               ) : (
                 <Reorder.Group
@@ -539,44 +668,12 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             <CardContent className="pt-4">
               <div className="flex items-center gap-4 flex-wrap">
                 <Label className="text-sm text-muted-foreground">提出期限:</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-48">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      {format(deadline, 'yyyy年M月d日', { locale: ja })}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={deadline}
-                      onSelect={(date) => {
-                        if (date) {
-                          const newDate = new Date(date)
-                          newDate.setHours(deadline.getHours())
-                          newDate.setMinutes(deadline.getMinutes())
-                          setDeadline(newDate)
-                        }
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="time"
-                    value={format(deadline, 'HH:mm')}
-                    onChange={(e) => {
-                      const [hours, minutes] = e.target.value.split(':').map(Number)
-                      const newDate = new Date(deadline)
-                      newDate.setHours(hours)
-                      newDate.setMinutes(minutes)
-                      setDeadline(newDate)
-                    }}
-                    className="w-28"
-                  />
-                </div>
+                <RichDateTimePicker
+                  value={deadline}
+                  onChange={(date) => date && setDeadline(date)}
+                  minDate={new Date()}
+                  className="w-64"
+                />
               </div>
             </CardContent>
           </Card>
@@ -597,6 +694,10 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 <ElementProperties
                   element={elements.find(e => e.id === selectedElement)!}
                   onUpdate={(updates) => updateElement(selectedElement, updates)}
+                  onOpenMapPicker={() => {
+                    setMapPickerElementId(selectedElement)
+                    setShowMapPicker(true)
+                  }}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -657,25 +758,13 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label className="text-sm">公開日時</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full mt-2">
-                  <Clock className="w-4 h-4 mr-2" />
-                  {scheduledAt
-                    ? format(scheduledAt, 'yyyy年M月d日 HH:mm', { locale: ja })
-                    : '日時を選択'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={scheduledAt}
-                  onSelect={setScheduledAt}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Label className="text-sm mb-2 block">公開日時</Label>
+            <RichDateTimePicker
+              value={scheduledAt}
+              onChange={setScheduledAt}
+              minDate={new Date()}
+              placeholder="公開日時を選択..."
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
@@ -747,6 +836,80 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Answer Selection Dialog */}
+      <Dialog open={showAnswerSelectionDialog} onOpenChange={setShowAnswerSelectionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>解答欄の設定</DialogTitle>
+            <DialogDescription>
+              問題番号と解答欄のラベルを選択してください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label className="text-sm">問題番号（任意）</Label>
+              <Input
+                value={selectedQuestionNumber}
+                onChange={(e) => setSelectedQuestionNumber(e.target.value)}
+                className="mt-1"
+                placeholder="例: (1), 問1, Q1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm mb-2 block">解答欄ラベル</Label>
+              <div className="flex flex-wrap gap-1">
+                {KATAKANA_MARKERS.slice(0, 20).map((marker) => (
+                  <button
+                    key={marker}
+                    type="button"
+                    onClick={() => setSelectedAnswerSlot(marker)}
+                    className={`w-8 h-8 text-sm rounded border transition-colors ${
+                      selectedAnswerSlot === marker
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-muted hover:bg-accent border-border'
+                    }`}
+                  >
+                    {marker}
+                  </button>
+                ))}
+              </div>
+              <Input
+                value={selectedAnswerSlot}
+                onChange={(e) => setSelectedAnswerSlot(e.target.value)}
+                className="mt-2"
+                placeholder="またはカスタムラベルを入力"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowAnswerSelectionDialog(false)
+              setPendingElementType(null)
+            }}>
+              キャンセル
+            </Button>
+            <Button onClick={confirmAddAnswerElement}>
+              追加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Map Picker Dialog */}
+      {mapPickerElementId && (
+        <GoogleMapPicker
+          pins={elements.find(e => e.id === mapPickerElementId)?.mapPins || []}
+          onPinsChange={(pins) => {
+            updateElement(mapPickerElementId, { mapPins: pins })
+          }}
+          isOpen={showMapPicker}
+          onClose={() => {
+            setShowMapPicker(false)
+            setMapPickerElementId(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -896,25 +1059,49 @@ function ElementRenderer({
       )
     
     case 'map':
+      if (element.mapPins && element.mapPins.length > 0) {
+        return <GoogleMapDisplay pins={element.mapPins} />
+      }
       return (
         <div className="flex items-center justify-center h-48 bg-muted rounded-lg border-2 border-dashed">
           <div className="text-center">
             <Map className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">地図を追加（プロパティで設定）</p>
-            {element.mapPins && element.mapPins.length > 0 && (
-              <p className="text-xs text-primary mt-1">{element.mapPins.length}個のピンが設定済み</p>
-            )}
           </div>
         </div>
       )
 
     case 'embed':
       if (element.embedHtml) {
+        // Use iframe sandbox for interactive HTML content
+        const sanitizedHtml = DOMPurify.sanitize(element.embedHtml, {
+          ADD_TAGS: ['iframe', 'script', 'style'],
+          ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'sandbox', 'srcdoc']
+        })
+        
+        // Check if content contains interactive elements
+        const hasInteractive = /<(script|iframe|canvas|svg|button|input|form)/i.test(element.embedHtml)
+        
+        if (hasInteractive) {
+          // Use srcdoc iframe for full interactivity
+          return (
+            <div className="border rounded-lg overflow-hidden bg-white">
+              <iframe
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:sans-serif;}*{box-sizing:border-box;}</style></head><body>${element.embedHtml}</body></html>`}
+                className="w-full min-h-[200px]"
+                style={{ height: element.style?.height || 300 }}
+                sandbox="allow-scripts allow-same-origin"
+                title="Embedded content"
+              />
+            </div>
+          )
+        }
+        
         return (
           <div className="border rounded-lg p-4 bg-muted/30">
             <div 
               className="embed-content"
-              dangerouslySetInnerHTML={{ __html: element.embedHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
           </div>
         )
@@ -935,10 +1122,12 @@ function ElementRenderer({
 
 function ElementProperties({
   element,
-  onUpdate
+  onUpdate,
+  onOpenMapPicker
 }: {
   element: EditorElement
   onUpdate: (updates: Partial<EditorElement>) => void
+  onOpenMapPicker?: () => void
 }) {
   if (element.type === 'answer-box') {
     return (
@@ -1046,72 +1235,44 @@ function ElementProperties({
   }
 
   if (element.type === 'map') {
-    const [newPin, setNewPin] = useState({ lat: '', lng: '', label: '' })
-    
-    const addPin = () => {
-      if (newPin.lat && newPin.lng) {
-        const pins = element.mapPins || []
-        onUpdate({ 
-          mapPins: [...pins, { 
-            lat: parseFloat(newPin.lat), 
-            lng: parseFloat(newPin.lng), 
-            label: newPin.label 
-          }] 
-        })
-        setNewPin({ lat: '', lng: '', label: '' })
-      }
-    }
-
-    const removePin = (index: number) => {
-      const pins = element.mapPins || []
-      onUpdate({ mapPins: pins.filter((_, i) => i !== index) })
-    }
-
     return (
       <div className="space-y-4">
-        <div>
-          <Label className="text-sm">ピンを追加</Label>
-          <div className="space-y-2 mt-2">
-            <Input
-              placeholder="緯度 (例: 35.6762)"
-              value={newPin.lat}
-              onChange={(e) => setNewPin({ ...newPin, lat: e.target.value })}
-            />
-            <Input
-              placeholder="経度 (例: 139.6503)"
-              value={newPin.lng}
-              onChange={(e) => setNewPin({ ...newPin, lng: e.target.value })}
-            />
-            <Input
-              placeholder="ラベル (任意)"
-              value={newPin.label}
-              onChange={(e) => setNewPin({ ...newPin, label: e.target.value })}
-            />
-            <Button size="sm" onClick={addPin} className="w-full">
-              ピンを追加
-            </Button>
-          </div>
-        </div>
+        <Button 
+          onClick={onOpenMapPicker}
+          className="w-full"
+        >
+          <MapPin className="w-4 h-4 mr-2" />
+          地図でピンを配置
+        </Button>
+        
         {element.mapPins && element.mapPins.length > 0 && (
           <div>
-            <Label className="text-sm">設定済みのピン</Label>
-            <div className="space-y-2 mt-2">
+            <Label className="text-sm">設定済みのピン ({element.mapPins.length})</Label>
+            <div className="space-y-2 mt-2 max-h-48 overflow-y-auto">
               {element.mapPins.map((pin, index) => (
                 <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
-                  <span className="flex-1">{pin.label || `ピン${index + 1}`}: ({pin.lat}, {pin.lng})</span>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-6 w-6"
-                    onClick={() => removePin(index)}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
+                  <span className="flex-1">{pin.label || `ピン${index + 1}`}</span>
+                  <span className="text-muted-foreground">
+                    {pin.lat.toFixed(2)}, {pin.lng.toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
         )}
+        
+        <div>
+          <Label className="text-sm">高さ</Label>
+          <Slider
+            value={[element.style?.height || 200]}
+            onValueChange={([value]) => onUpdate({ style: { ...element.style, height: value } })}
+            min={100}
+            max={400}
+            step={20}
+            className="mt-2"
+          />
+          <p className="text-xs text-muted-foreground mt-1">{element.style?.height || 200}px</p>
+        </div>
       </div>
     )
   }

@@ -32,11 +32,15 @@ export interface EditorElement {
     textAlign?: 'left' | 'center' | 'right'
     width?: number
     height?: number
+    rotation?: number
   }
   position?: {
     x: number
     y: number
   }
+  // For question number/answer selection
+  questionNumber?: string
+  answerSlot?: string
 }
 
 // 課題テンプレート
@@ -69,6 +73,7 @@ export interface StudentSubmission {
   assignmentId: string
   studentId: string
   studentName: string
+  studentClass: string
   answers: Record<string, string> // elementId -> answer
   submittedAt: Date
   history: {
