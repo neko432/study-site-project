@@ -88,6 +88,19 @@ export function TeacherDashboard() {
     if (assignment) {
       // Create a print-friendly version
       const printContent = document.createElement('div')
+      const elementsHtml = assignment.elements.map(el => {
+        if (el.type === 'heading') return `<h2 style="font-size: 20px; margin-top: 16px;">${el.content}</h2>`
+        if (el.type === 'text') return `<p style="margin: 8px 0;">${el.content}</p>`
+        if (el.type === 'question-label') return `<p style="font-weight: bold; margin-top: 12px;">${el.content}</p>`
+        if (el.type === 'answer-box') return `
+          <div class="answer-box">
+            <span>(${el.content})</span>
+            ${printWithAnswers ? `<span class="answer"> ${el.answer || ''}</span>` : ''}
+          </div>`
+        if (el.type === 'divider') return '<hr style="margin: 16px 0;" />'
+        return ''
+      }).join('')
+
       printContent.innerHTML = `
         <style>
           @media print {
@@ -101,18 +114,7 @@ export function TeacherDashboard() {
         <div class="print-content">
           <h1 style="font-size: 24px; margin-bottom: 16px;">${assignment.title}</h1>
           <p style="margin-bottom: 16px;">${assignment.description}</p>
-          ${assignment.elements.map(el => {
-            if (el.type === 'heading') return \`<h2 style="font-size: 20px; margin-top: 16px;">\${el.content}</h2>\`
-            if (el.type === 'text') return \`<p style="margin: 8px 0;">\${el.content}</p>\`
-            if (el.type === 'question-label') return \`<p style="font-weight: bold; margin-top: 12px;">\${el.content}</p>\`
-            if (el.type === 'answer-box') return \`
-              <div class="answer-box">
-                <span>(\${el.content})</span>
-                \${printWithAnswers ? \`<span class="answer"> \${el.answer || ''}</span>\` : ''}
-              </div>\`
-            if (el.type === 'divider') return '<hr style="margin: 16px 0;" />'
-            return ''
-          }).join('')}
+          ${elementsHtml}
         </div>
       `
       document.body.appendChild(printContent)
