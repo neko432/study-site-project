@@ -13,7 +13,6 @@ export type ElementType =
   | 'katakana-marker'
   | 'divider'
   | 'question-label'
-  | 'embed'
 
 // エディター要素
 export interface EditorElement {
@@ -22,25 +21,11 @@ export interface EditorElement {
   content: string
   answer?: string
   importantPoint?: string
-  imageUrl?: string
-  embedCode?: string
-  mapData?: {
-    lat: number
-    lng: number
-    zoom: number
-    markers: { lat: number; lng: number; label?: string }[]
-  }
   style?: {
     fontSize?: string
     fontWeight?: string
     color?: string
     textAlign?: 'left' | 'center' | 'right'
-    width?: string
-    height?: string
-  }
-  size?: {
-    width: number
-    height: number
   }
   position?: {
     x: number

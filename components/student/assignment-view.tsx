@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
@@ -48,7 +48,7 @@ interface AssignmentViewProps {
 }
 
 export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
-  const { assignments, submissions, currentStudentId, studentName, addSubmission, updateSubmission, saveProgress, getProgress } = useAppStore()
+  const { assignments, submissions, currentStudentId, addSubmission, updateSubmission } = useAppStore()
 
   const assignment = assignments.find(a => a.id === assignmentId)
   const existingSubmission = submissions.find(
@@ -58,11 +58,6 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     if (existingSubmission) {
       return { ...existingSubmission.answers }
-    }
-    // Load saved progress
-    const savedProgress = getProgress(assignmentId)
-    if (Object.keys(savedProgress).length > 0) {
-      return savedProgress
     }
     return {}
   })
