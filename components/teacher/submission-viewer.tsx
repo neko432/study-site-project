@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/lib/store'
+import type { Assignment, Submission } from '@/lib/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -24,7 +25,7 @@ interface SubmissionViewerProps {
 }
 
 export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps) {
-  const { assignments, submissions } = useAppStore()
+  const { assignments, submissions } = useAppStore() as { assignments: Assignment[]; submissions: Submission[] }
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
 

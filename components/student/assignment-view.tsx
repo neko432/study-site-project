@@ -437,7 +437,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               答えを表示しますか?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              答えを見ながら回答を確認できます。自分で考えてから見ることをお��すめします。
+              答えを見ながら回答を確認できます。自分で考えてから見ることをお���すめします。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -547,7 +547,7 @@ function ElementDisplay({
   isOverdue,
   answerNumber
 }: {
-  element: NonNullable<ReturnType<typeof useAppStore>['assignments'][0]>['elements'][0]
+  element: any
   index: number
   answer: string
   onAnswerChange: (value: string) => void
