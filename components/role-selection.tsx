@@ -147,14 +147,19 @@ export function RoleSelection() {
             whileTap={{ scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {/* yui540風 ホバー時のグラデーションオーバーレイ */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {/* シマー効果 */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 overflow-hidden">
+              <div className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-primary/10 to-transparent" style={{ backgroundSize: '200% 100%' }} />
+            </div>
             <div className="relative h-full flex flex-col items-center justify-center p-6">
               <motion.div
-                className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6"
+                className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors duration-300"
                 whileHover={{ rotate: [0, -10, 10, -10, 0] }}
                 transition={{ duration: 0.5 }}
               >
-                <GraduationCap className="w-12 h-12 text-primary" />
+                <GraduationCap className="w-12 h-12 text-primary group-hover:scale-110 transition-transform duration-300" />
               </motion.div>
               <h2 className="text-2xl font-bold text-foreground mb-2">先生</h2>
               <p className="text-sm text-muted-foreground text-center">
@@ -180,19 +185,24 @@ export function RoleSelection() {
         >
           <motion.button
             onClick={handleStudentClick}
-            className="group relative w-64 h-72 bg-card rounded-3xl shadow-xl border-2 border-secondary/20 overflow-hidden"
+            className="group relative w-64 h-72 bg-card rounded-3xl shadow-xl border-2 border-student/20 overflow-hidden"
             whileHover={{ scale: 1.05, y: -5 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-secondary/5 to-secondary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {/* yui540風 ホバー時のグラデーションオーバーレイ */}
+            <div className="absolute inset-0 bg-gradient-to-br from-student/5 via-student/10 to-student/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {/* シマー効果 */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 overflow-hidden">
+              <div className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-student/10 to-transparent" style={{ backgroundSize: '200% 100%' }} />
+            </div>
             <div className="relative h-full flex flex-col items-center justify-center p-6">
               <motion.div
-                className="w-24 h-24 rounded-full bg-secondary/30 flex items-center justify-center mb-6"
+                className="w-24 h-24 rounded-full bg-student/10 flex items-center justify-center mb-6 group-hover:bg-student/20 transition-colors duration-300"
                 whileHover={{ rotate: [0, -10, 10, -10, 0] }}
                 transition={{ duration: 0.5 }}
               >
-                <Users className="w-12 h-12 text-secondary-foreground" />
+                <Users className="w-12 h-12 text-student group-hover:scale-110 transition-transform duration-300" />
               </motion.div>
               <h2 className="text-2xl font-bold text-foreground mb-2">生徒</h2>
               <p className="text-sm text-muted-foreground text-center">
@@ -202,7 +212,7 @@ export function RoleSelection() {
               </p>
             </div>
             <motion.div
-              className="absolute bottom-0 left-0 right-0 h-1 bg-secondary"
+              className="absolute bottom-0 left-0 right-0 h-1 bg-student"
               initial={{ scaleX: 0 }}
               whileHover={{ scaleX: 1 }}
               transition={{ duration: 0.3 }}

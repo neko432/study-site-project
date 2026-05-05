@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +33,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'
 import { useAppStore } from '@/lib/store'
 import { AssignmentEditor } from './assignment-editor'
 import { SubmissionViewer } from './submission-viewer'
@@ -44,6 +54,9 @@ export function TeacherDashboard() {
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [assignmentToPrint, setAssignmentToPrint] = useState<string | null>(null)
+  const [printWithAnswers, setPrintWithAnswers] = useState(true)
 
   const handleDeleteClick = (assignmentId: string) => {
     setAssignmentToDelete(assignmentId)
@@ -58,11 +71,20 @@ export function TeacherDashboard() {
     setAssignmentToDelete(null)
   }
 
-  const handlePrint = (assignmentId: string) => {
-    const assignment = assignments.find(a => a.id === assignmentId)
+  const handlePrintClick = (assignmentId: string) => {
+    setAssignmentToPrint(assignmentId)
+    setPrintDialogOpen(true)
+  }
+
+  const handlePrint = () => {
+    const assignment = assignments.find(a => a.id === assignmentToPrint)
     if (assignment) {
+      console.log('印刷:', printWithAnswers ? '答え含む' : '答え含まない', assignment.title)
+      // TODO: 実際の印刷機能を実装
       window.print()
     }
+    setPrintDialogOpen(false)
+    setAssignmentToPrint(null)
   }
 
   const publishedAssignments = assignments.filter(a => a.status === 'published')
@@ -171,35 +193,41 @@ export function TeacherDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {assignments.slice(0, 3).map((assignment, index) => (
-                    <motion.div
+                    <motion.button
                       key={assignment.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
+                      whileHover={{ scale: 1.02, x: 4 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setEditingAssignment(assignment.id)}
+                      className="w-full flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-primary/10 hover:border-primary/20 border border-transparent transition-all duration-200 cursor-pointer group"
                     >
-                      <div>
-                        <p className="font-medium text-foreground">{assignment.title}</p>
+                      <div className="text-left">
+                        <p className="font-medium text-foreground group-hover:text-primary transition-colors">{assignment.title}</p>
                         <p className="text-sm text-muted-foreground">
                           期限: {format(new Date(assignment.deadline), 'M月d日', { locale: ja })}
                         </p>
                       </div>
-                      <Badge
-                        variant={
-                          assignment.status === 'published'
-                            ? 'default'
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            assignment.status === 'published'
+                              ? 'default'
+                              : assignment.status === 'scheduled'
+                              ? 'secondary'
+                              : 'outline'
+                          }
+                        >
+                          {assignment.status === 'published'
+                            ? '公開中'
                             : assignment.status === 'scheduled'
-                            ? 'secondary'
-                            : 'outline'
-                        }
-                      >
-                        {assignment.status === 'published'
-                          ? '公開中'
-                          : assignment.status === 'scheduled'
-                          ? '予約'
-                          : '下書き'}
-                      </Badge>
-                    </motion.div>
+                            ? '予約'
+                            : '下書き'}
+                        </Badge>
+                        <Edit3 className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </motion.button>
                   ))}
                   {assignments.length === 0 && (
                     <p className="text-center text-muted-foreground py-4">
@@ -333,7 +361,7 @@ export function TeacherDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handlePrint(assignment.id)}
+                            onClick={() => handlePrintClick(assignment.id)}
                           >
                             <Printer className="w-4 h-4" />
                           </Button>
@@ -527,6 +555,96 @@ export function TeacherDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 印刷ダイアログ */}
+      <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="w-5 h-5" />
+              印刷オプション
+            </DialogTitle>
+            <DialogDescription>
+              印刷する内容を選択してください
+            </DialogDescription>
+          </DialogHeader>
+          <motion.div 
+            className="py-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <div className="space-y-4">
+              <motion.div 
+                className={`flex items-center space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                  printWithAnswers 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-border hover:border-primary/50'
+                }`}
+                onClick={() => setPrintWithAnswers(true)}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <Checkbox
+                  id="print-with-answers"
+                  checked={printWithAnswers}
+                  onCheckedChange={(checked) => setPrintWithAnswers(checked as boolean)}
+                />
+                <div className="flex-1">
+                  <Label
+                    htmlFor="print-with-answers"
+                    className="text-base font-medium cursor-pointer"
+                  >
+                    答えを含めて印刷
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    解答欄に正解が表示されます（採点用）
+                  </p>
+                </div>
+              </motion.div>
+              
+              <motion.div 
+                className={`flex items-center space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                  !printWithAnswers 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-border hover:border-primary/50'
+                }`}
+                onClick={() => setPrintWithAnswers(false)}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <Checkbox
+                  id="print-without-answers"
+                  checked={!printWithAnswers}
+                  onCheckedChange={(checked) => setPrintWithAnswers(!(checked as boolean))}
+                />
+                <div className="flex-1">
+                  <Label
+                    htmlFor="print-without-answers"
+                    className="text-base font-medium cursor-pointer"
+                  >
+                    答えなしで印刷
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    解答欄は空欄のまま印刷されます（配布用）
+                  </p>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button onClick={handlePrint}>
+                <Printer className="w-4 h-4 mr-2" />
+                印刷する
+              </Button>
+            </motion.div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
