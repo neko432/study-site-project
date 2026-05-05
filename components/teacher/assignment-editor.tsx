@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import {
   ArrowLeft,
@@ -21,7 +21,11 @@ import {
   X,
   Copy,
   Check,
-  Clock
+  Clock,
+  Undo2,
+  Redo2,
+  Code2,
+  ImagePlus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,8 +72,9 @@ const ELEMENT_TYPES: { type: ElementType; icon: React.ReactNode; label: string }
   { type: 'question-label', icon: <List className="w-4 h-4" />, label: '問題番号' },
   { type: 'katakana-marker', icon: <span className="text-sm font-bold">(ア)</span>, label: 'カタカナ' },
   { type: 'divider', icon: <Minus className="w-4 h-4" />, label: '区切り線' },
-  { type: 'image', icon: <Image className="w-4 h-4" />, label: '画像' },
+  { type: 'image', icon: <ImagePlus className="w-4 h-4" />, label: '画像' },
   { type: 'map', icon: <Map className="w-4 h-4" />, label: '地図' },
+  { type: 'embed', icon: <Code2 className="w-4 h-4" />, label: '埋め込み' },
 ]
 
 export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps) {
@@ -98,6 +103,70 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
   const [templateName, setTemplateName] = useState('')
+  const [showEmbedDialog, setShowEmbedDialog] = useState(false)
+  const [embedHtml, setEmbedHtml] = useState('')
+  const [showImageDialog, setShowImageDialog] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageAlt, setImageAlt] = useState('')
+  const [pendingImageElementId, setPendingImageElementId] = useState<string | null>(null)
+  const [pendingEmbedElementId, setPendingEmbedElementId] = useState<string | null>(null)
+
+  // Undo/Redo state
+  const [history, setHistory] = useState<EditorElement[][]>([elements])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  const isUndoRedoAction = useRef(false)
+
+  const canUndo = historyIndex > 0
+  const canRedo = historyIndex < history.length - 1
+
+  // Track element changes for history
+  useEffect(() => {
+    if (isUndoRedoAction.current) {
+      isUndoRedoAction.current = false
+      return
+    }
+    // Only add to history if elements actually changed
+    if (JSON.stringify(elements) !== JSON.stringify(history[historyIndex])) {
+      const newHistory = history.slice(0, historyIndex + 1)
+      newHistory.push([...elements])
+      // Keep only last 50 states
+      if (newHistory.length > 50) newHistory.shift()
+      setHistory(newHistory)
+      setHistoryIndex(newHistory.length - 1)
+    }
+  }, [elements])
+
+  const handleUndo = useCallback(() => {
+    if (canUndo) {
+      isUndoRedoAction.current = true
+      setHistoryIndex(prev => prev - 1)
+      setElements([...history[historyIndex - 1]])
+    }
+  }, [canUndo, history, historyIndex])
+
+  const handleRedo = useCallback(() => {
+    if (canRedo) {
+      isUndoRedoAction.current = true
+      setHistoryIndex(prev => prev + 1)
+      setElements([...history[historyIndex + 1]])
+    }
+  }, [canRedo, history, historyIndex])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          handleRedo()
+        } else {
+          handleUndo()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo, handleRedo])
 
   const generateId = () => `element-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
@@ -106,15 +175,43 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
       id: generateId(),
       type,
       content: getDefaultContent(type, katakanaIndex),
-      ...(type === 'answer-box' && { answer: '', importantPoint: '' })
+      ...(type === 'answer-box' && { answer: '', importantPoint: '' }),
+      ...(type === 'embed' && { embedHtml: '' }),
+      ...(type === 'image' && { imageUrl: '', imageAlt: '' })
     }
     
     if (type === 'katakana-marker') {
       setKatakanaIndex(prev => (prev + 1) % KATAKANA_MARKERS.length)
     }
     
+    // For image and embed, show dialog first
+    if (type === 'image') {
+      setPendingImageElementId(newElement.id)
+      setImageUrl('')
+      setImageAlt('')
+      setShowImageDialog(true)
+      setElements(prev => [...prev, newElement])
+      setSelectedElement(newElement.id)
+      return
+    }
+    
+    if (type === 'embed') {
+      setPendingEmbedElementId(newElement.id)
+      setEmbedHtml('')
+      setShowEmbedDialog(true)
+      setElements(prev => [...prev, newElement])
+      setSelectedElement(newElement.id)
+      return
+    }
+    
     setElements(prev => [...prev, newElement])
     setSelectedElement(newElement.id)
+    
+    // Auto-scroll to new element after a brief delay
+    setTimeout(() => {
+      const element = document.getElementById(`element-${newElement.id}`)
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
   }, [katakanaIndex])
 
   const updateElement = useCallback((id: string, updates: Partial<EditorElement>) => {
@@ -230,6 +327,44 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
     setShowPrintDialog(false)
   }
 
+  const handleSaveImage = () => {
+    if (pendingImageElementId) {
+      updateElement(pendingImageElementId, {
+        imageUrl,
+        imageAlt,
+        content: imageAlt || '画像'
+      })
+      setShowImageDialog(false)
+      setPendingImageElementId(null)
+      setImageUrl('')
+      setImageAlt('')
+    }
+  }
+
+  const handleSaveEmbed = () => {
+    if (pendingEmbedElementId) {
+      updateElement(pendingEmbedElementId, {
+        embedHtml,
+        content: '埋め込みコンテンツ'
+      })
+      setShowEmbedDialog(false)
+      setPendingEmbedElementId(null)
+      setEmbedHtml('')
+    }
+  }
+
+  const handleImageFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const result = event.target?.result as string
+        setImageUrl(result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* ヘッダー */}
@@ -251,6 +386,29 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             />
           </div>
           <div className="flex items-center gap-2">
+            {/* Undo/Redo buttons */}
+            <div className="flex items-center border rounded-lg mr-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleUndo}
+                disabled={!canUndo}
+                className="h-9 w-9 rounded-r-none"
+                title="元に戻す (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRedo}
+                disabled={!canRedo}
+                className="h-9 w-9 rounded-l-none border-l"
+                title="やり直す (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="w-4 h-4" />
+              </Button>
+            </div>
             <Button variant="outline" onClick={() => setShowPrintDialog(true)}>
               <Printer className="w-4 h-4 mr-2" />
               印刷
@@ -299,24 +457,26 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 </motion.div>
               ))}
 
-              {/* カタカナクイック選択 */}
+              {/* カタカナクイック選択 (ア-ン全対応) */}
               <div className="pt-4 border-t">
-                <p className="text-sm text-muted-foreground mb-2">カタカナ記号</p>
-                <div className="grid grid-cols-5 gap-1">
-                  {KATAKANA_MARKERS.slice(0, 10).map((marker, index) => (
-                    <motion.button
-                      key={marker}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-2 text-sm rounded-lg bg-muted hover:bg-accent transition-colors"
-                      onClick={() => {
-                        setKatakanaIndex(index)
-                        addElement('katakana-marker')
-                      }}
-                    >
-                      ({marker})
-                    </motion.button>
-                  ))}
+                <p className="text-sm text-muted-foreground mb-2">カタカナ記号 (ア〜ン)</p>
+                <div className="max-h-40 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-5 gap-1">
+                    {KATAKANA_MARKERS.map((marker, index) => (
+                      <motion.button
+                        key={marker}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        className="p-2 text-sm rounded-lg bg-muted hover:bg-accent transition-colors"
+                        onClick={() => {
+                          setKatakanaIndex(index)
+                          addElement('katakana-marker')
+                        }}
+                      >
+                        ({marker})
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -364,6 +524,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                         className="relative"
                       >
                         <motion.div
+                          id={`element-${element.id}`}
                           layout
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -426,24 +587,44 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           {/* 期限設定 */}
           <Card>
             <CardContent className="pt-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <Label className="text-sm text-muted-foreground">提出期限:</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-64">
+                    <Button variant="outline" className="w-48">
                       <Calendar className="w-4 h-4 mr-2" />
-                      {format(deadline, 'yyyy年M月d日 HH:mm', { locale: ja })}
+                      {format(deadline, 'yyyy年M月d日', { locale: ja })}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <CalendarComponent
                       mode="single"
                       selected={deadline}
-                      onSelect={(date) => date && setDeadline(date)}
+                      onSelect={(date) => {
+                        if (date) {
+                          const newDeadline = new Date(date)
+                          newDeadline.setHours(deadline.getHours(), deadline.getMinutes())
+                          setDeadline(newDeadline)
+                        }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
                 </Popover>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="time"
+                    value={format(deadline, 'HH:mm')}
+                    onChange={(e) => {
+                      const [hours, minutes] = e.target.value.split(':').map(Number)
+                      const newDeadline = new Date(deadline)
+                      newDeadline.setHours(hours, minutes)
+                      setDeadline(newDeadline)
+                    }}
+                    className="w-28"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -523,26 +704,55 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
               指定した日時に自動的に公開されます。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label className="text-sm">公開日時</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full mt-2">
-                  <Clock className="w-4 h-4 mr-2" />
-                  {scheduledAt
-                    ? format(scheduledAt, 'yyyy年M月d日 HH:mm', { locale: ja })
-                    : '日時を選択'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={scheduledAt}
-                  onSelect={setScheduledAt}
-                  initialFocus
+          <div className="py-4 space-y-4">
+            <div>
+              <Label className="text-sm">公開日</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full mt-2">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    {scheduledAt
+                      ? format(scheduledAt, 'yyyy年M月d日', { locale: ja })
+                      : '日付を選択'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={scheduledAt}
+                    onSelect={(date) => {
+                      if (date) {
+                        const newDate = new Date(date)
+                        if (scheduledAt) {
+                          newDate.setHours(scheduledAt.getHours(), scheduledAt.getMinutes())
+                        } else {
+                          newDate.setHours(9, 0) // Default to 9:00 AM
+                        }
+                        setScheduledAt(newDate)
+                      }
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <Label className="text-sm">公開時刻</Label>
+              <div className="flex items-center gap-2 mt-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="time"
+                  value={scheduledAt ? format(scheduledAt, 'HH:mm') : '09:00'}
+                  onChange={(e) => {
+                    const [hours, minutes] = e.target.value.split(':').map(Number)
+                    const newDate = scheduledAt ? new Date(scheduledAt) : new Date()
+                    newDate.setHours(hours, minutes)
+                    setScheduledAt(newDate)
+                  }}
+                  className="flex-1"
                 />
-              </PopoverContent>
-            </Popover>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
@@ -610,6 +820,133 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             <Button onClick={handleSaveTemplate} disabled={!templateName}>
               <Save className="w-4 h-4 mr-2" />
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 画像アップロードダイアログ */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImagePlus className="w-5 h-5" />
+              画像を追加
+            </DialogTitle>
+            <DialogDescription>
+              画像URLを入力するか、ファイルをアップロードしてください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="image-file">ファイルを選択</Label>
+              <Input
+                id="image-file"
+                type="file"
+                accept="image/*"
+                onChange={handleImageFileSelect}
+                className="mt-2"
+              />
+            </div>
+            <div className="text-center text-sm text-muted-foreground">または</div>
+            <div>
+              <Label htmlFor="image-url">画像URL</Label>
+              <Input
+                id="image-url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label htmlFor="image-alt">代替テキスト（アクセシビリティ用）</Label>
+              <Input
+                id="image-alt"
+                value={imageAlt}
+                onChange={(e) => setImageAlt(e.target.value)}
+                placeholder="画像の説明"
+                className="mt-2"
+              />
+            </div>
+            {imageUrl && (
+              <div className="border rounded-lg p-4">
+                <p className="text-sm text-muted-foreground mb-2">プレビュー:</p>
+                <img 
+                  src={imageUrl} 
+                  alt={imageAlt || 'プレビュー'} 
+                  className="max-h-40 mx-auto rounded"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowImageDialog(false)
+              if (pendingImageElementId) {
+                deleteElement(pendingImageElementId)
+                setPendingImageElementId(null)
+              }
+            }}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSaveImage} disabled={!imageUrl}>
+              <ImagePlus className="w-4 h-4 mr-2" />
+              追加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* HTML埋め込みダイアログ */}
+      <Dialog open={showEmbedDialog} onOpenChange={setShowEmbedDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Code2 className="w-5 h-5" />
+              HTMLを埋め込む
+            </DialogTitle>
+            <DialogDescription>
+              埋め込みたいHTMLコードを入力してください（iframe、YouTube動画など）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="embed-html">HTMLコード</Label>
+              <Textarea
+                id="embed-html"
+                value={embedHtml}
+                onChange={(e) => setEmbedHtml(e.target.value)}
+                placeholder='<iframe src="..." width="100%" height="315"></iframe>'
+                className="mt-2 min-h-[150px] font-mono text-sm"
+              />
+            </div>
+            {embedHtml && (
+              <div className="border rounded-lg p-4">
+                <p className="text-sm text-muted-foreground mb-2">プレビュー:</p>
+                <div 
+                  className="bg-muted/50 rounded p-4 overflow-auto max-h-60"
+                  dangerouslySetInnerHTML={{ __html: embedHtml }}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowEmbedDialog(false)
+              if (pendingEmbedElementId) {
+                deleteElement(pendingEmbedElementId)
+                setPendingEmbedElementId(null)
+              }
+            }}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSaveEmbed} disabled={!embedHtml}>
+              <Code2 className="w-4 h-4 mr-2" />
+              埋め込む
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -687,11 +1024,22 @@ function ElementRenderer({
       return <hr className="border-t-2 border-border" />
     
     case 'image':
-      return (
+      return element.imageUrl ? (
+        <div className="rounded-lg overflow-hidden">
+          <img 
+            src={element.imageUrl} 
+            alt={element.imageAlt || element.content}
+            className="max-h-64 mx-auto rounded"
+          />
+          {element.imageAlt && (
+            <p className="text-sm text-muted-foreground text-center mt-2">{element.imageAlt}</p>
+          )}
+        </div>
+      ) : (
         <div className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed">
           <div className="text-center">
             <Image className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">画像をアップロード</p>
+            <p className="text-sm text-muted-foreground">画像をクリックして設定</p>
           </div>
         </div>
       )
@@ -702,6 +1050,20 @@ function ElementRenderer({
           <div className="text-center">
             <Map className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">地図を追加</p>
+          </div>
+        </div>
+      )
+    
+    case 'embed':
+      return element.embedHtml ? (
+        <div className="rounded-lg overflow-hidden bg-muted/30 p-4">
+          <div dangerouslySetInnerHTML={{ __html: element.embedHtml }} />
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed">
+          <div className="text-center">
+            <Code2 className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">埋め込みコンテンツを追加</p>
           </div>
         </div>
       )

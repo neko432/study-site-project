@@ -24,6 +24,8 @@ interface AppState {
   // 生徒用
   submissions: StudentSubmission[]
   currentStudentId: string
+  studentName: string
+  studentClass: string
   
   // アクション
   setRole: (role: UserRole) => void
@@ -49,6 +51,9 @@ interface AppState {
   // 提出管理
   addSubmission: (submission: StudentSubmission) => void
   updateSubmission: (id: string, submission: Partial<StudentSubmission>) => void
+  
+  // 生徒情報
+  setStudentInfo: (name: string, studentClass: string) => void
 }
 
 // サンプル課題データ
@@ -167,6 +172,8 @@ export const useAppStore = create<AppState>()(
       currentEditor: [],
       submissions: [],
       currentStudentId: 'student-1',
+      studentName: '',
+      studentClass: '',
       
       // 認証アクション
       setRole: (role) => set({ role }),
@@ -221,7 +228,10 @@ export const useAppStore = create<AppState>()(
           submissions: state.submissions.map((s) =>
             s.id === id ? { ...s, ...updates } : s
           )
-        }))
+        })),
+      
+      // 生徒情報
+      setStudentInfo: (name, studentClass) => set({ studentName: name, studentClass })
     }),
     {
       name: 'learning-site-storage',

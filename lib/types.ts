@@ -13,6 +13,7 @@ export type ElementType =
   | 'katakana-marker'
   | 'divider'
   | 'question-label'
+  | 'embed'
 
 // エディター要素
 export interface EditorElement {
@@ -31,6 +32,14 @@ export interface EditorElement {
     x: number
     y: number
   }
+  // Image properties
+  imageUrl?: string
+  imageAlt?: string
+  // Embed properties
+  embedHtml?: string
+  // Size properties
+  width?: number
+  height?: number
 }
 
 // 課題テンプレート

@@ -1,23 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GraduationCap, Users, X, Eye, EyeOff, AlertCircle, Check } from 'lucide-react'
+import { GraduationCap, Users, X, Eye, EyeOff, AlertCircle, Check, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/lib/store'
 
+const SPECIAL_NAMES = ['熊田', '芝', '橋本']
+
 const TEACHER_PASSWORD = 'teacher123' // TODO: 実際の実装では環境変数などで管理
 
 export function RoleSelection() {
-  const { setRole, setAuthenticated, keepLoggedIn, setKeepLoggedIn } = useAppStore()
+  const { setRole, setAuthenticated, keepLoggedIn, setKeepLoggedIn, setStudentInfo } = useAppStore()
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showStudentModal, setShowStudentModal] = useState(false)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  
+  // Student modal state
+  const [studentName, setStudentName] = useState('')
+  const [studentClass, setStudentClass] = useState<string>('')
+  const [studentError, setStudentError] = useState('')
+  const [studentSuccess, setStudentSuccess] = useState(false)
+  const [isSpecialName, setIsSpecialName] = useState(false)
+
+  useEffect(() => {
+    const hasSpecial = SPECIAL_NAMES.some(name => studentName.includes(name))
+    setIsSpecialName(hasSpecial)
+  }, [studentName])
 
   const handleTeacherClick = () => {
     setShowPasswordModal(true)
@@ -27,8 +42,40 @@ export function RoleSelection() {
   }
 
   const handleStudentClick = () => {
-    setRole('student')
-    setAuthenticated(true)
+    setShowStudentModal(true)
+    setStudentName('')
+    setStudentClass('')
+    setStudentError('')
+    setStudentSuccess(false)
+  }
+
+  const handleStudentSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!studentName.trim()) {
+      setStudentError('名前を入力してください')
+      return
+    }
+    if (!studentClass) {
+      setStudentError('クラスを選択してください')
+      return
+    }
+    
+    setStudentSuccess(true)
+    setStudentInfo(studentName, studentClass)
+    
+    setTimeout(() => {
+      setRole('student')
+      setAuthenticated(true)
+      setShowStudentModal(false)
+    }, isSpecialName ? 1500 : 800)
+  }
+
+  const closeStudentModal = () => {
+    setShowStudentModal(false)
+    setStudentName('')
+    setStudentClass('')
+    setStudentError('')
+    setStudentSuccess(false)
   }
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -54,26 +101,7 @@ export function RoleSelection() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-secondary/30 via-background to-accent/20">
-      {/* 背景の装飾 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          className="absolute -top-20 -left-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl"
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.3, 0.5, 0.3],
-          }}
-          transition={{ duration: 5, repeat: Infinity }}
-        />
-        <motion.div
-          className="absolute -bottom-20 -right-20 w-80 h-80 bg-secondary/20 rounded-full blur-3xl"
-          animate={{
-            scale: [1.2, 1, 1.2],
-            opacity: [0.4, 0.6, 0.4],
-          }}
-          transition={{ duration: 6, repeat: Infinity }}
-        />
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
 
       <motion.div
         initial={{ opacity: 0, y: -30 }}
@@ -292,6 +320,187 @@ export function RoleSelection() {
               <p className="text-xs text-muted-foreground text-center mt-4">
                 デモ用パスワード: teacher123
               </p>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* 生徒モーダル */}
+      <AnimatePresence>
+        {showStudentModal && (
+          <>
+            {/* オーバーレイ */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeStudentModal}
+              className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40"
+            />
+            
+            {/* モーダル */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-card rounded-3xl shadow-2xl p-8 z-50"
+            >
+              <button
+                onClick={closeStudentModal}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-muted transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+
+              <div className="text-center mb-6">
+                <motion.div
+                  className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4"
+                  animate={studentSuccess ? { scale: [1, 1.2, 1] } : isSpecialName ? { rotate: [0, 360], scale: [1, 1.1, 1] } : {}}
+                  transition={isSpecialName ? { duration: 0.8, repeat: Infinity } : {}}
+                >
+                  {studentSuccess ? (
+                    isSpecialName ? (
+                      <Sparkles className="w-8 h-8 text-primary" />
+                    ) : (
+                      <Check className="w-8 h-8 text-success" />
+                    )
+                  ) : (
+                    <Users className="w-8 h-8 text-primary" />
+                  )}
+                </motion.div>
+                <h2 className="text-2xl font-bold text-foreground">生徒情報入力</h2>
+                <p className="text-sm text-muted-foreground mt-2">
+                  クラスと名前を入力してください
+                </p>
+              </div>
+
+              <form onSubmit={handleStudentSubmit} className="space-y-4">
+                {/* クラス選択 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">クラス</Label>
+                  <div className="flex gap-3">
+                    <motion.button
+                      type="button"
+                      onClick={() => {
+                        setStudentClass('1組')
+                        setStudentError('')
+                      }}
+                      className={`flex-1 h-12 rounded-xl border-2 font-medium transition-all ${
+                        studentClass === '1組'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      1組
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={() => {
+                        setStudentClass('2組')
+                        setStudentError('')
+                      }}
+                      className={`flex-1 h-12 rounded-xl border-2 font-medium transition-all ${
+                        studentClass === '2組'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      2組
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* 名前入力 */}
+                <div className="space-y-2">
+                  <Label htmlFor="student-name" className="text-sm font-medium">名前</Label>
+                  <div className="relative">
+                    <Input
+                      id="student-name"
+                      type="text"
+                      value={studentName}
+                      onChange={(e) => {
+                        setStudentName(e.target.value)
+                        setStudentError('')
+                      }}
+                      placeholder="山田 太郎"
+                      className={`h-12 text-lg ${studentError ? 'border-destructive' : ''} ${isSpecialName ? 'border-primary bg-primary/5' : ''}`}
+                    />
+                    {isSpecialName && (
+                      <motion.div
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      >
+                        <Sparkles className="w-5 h-5 text-primary" />
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {studentError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -10, height: 0 }}
+                      className="flex items-center gap-2 text-destructive text-sm"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{studentError}</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-lg font-medium"
+                  disabled={studentSuccess}
+                >
+                  <motion.span whileTap={{ scale: 0.95 }}>
+                    {studentSuccess ? (isSpecialName ? 'ようこそ!' : '開始します!') : '始める'}
+                  </motion.span>
+                </Button>
+              </form>
+
+              {/* 特別な名前の場合のエフェクト */}
+              <AnimatePresence>
+                {studentSuccess && isSpecialName && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl"
+                  >
+                    {[...Array(20)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute w-2 h-2 bg-primary rounded-full"
+                        initial={{
+                          x: '50%',
+                          y: '50%',
+                          scale: 0,
+                        }}
+                        animate={{
+                          x: `${Math.random() * 100}%`,
+                          y: `${Math.random() * 100}%`,
+                          scale: [0, 1, 0],
+                          opacity: [0, 1, 0],
+                        }}
+                        transition={{
+                          duration: 1,
+                          delay: i * 0.05,
+                          ease: 'easeOut',
+                        }}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </>
         )}

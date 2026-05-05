@@ -62,11 +62,25 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
     return {}
   })
   const [showAnswers, setShowAnswers] = useState(false)
+  const [showAnswersConfirm, setShowAnswersConfirm] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [viewMode, setViewMode] = useState<'work' | 'review'>('work')
+
+  const handleShowAnswersClick = () => {
+    if (showAnswers) {
+      setShowAnswers(false)
+    } else {
+      setShowAnswersConfirm(true)
+    }
+  }
+
+  const handleConfirmShowAnswers = () => {
+    setShowAnswers(true)
+    setShowAnswersConfirm(false)
+  }
 
   if (!assignment) {
     return (
@@ -173,7 +187,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
             <div className="flex items-center gap-2">
               <Button
                 variant={showAnswers ? 'default' : 'outline'}
-                onClick={() => setShowAnswers(!showAnswers)}
+                onClick={handleShowAnswersClick}
                 className="gap-2"
               >
                 {showAnswers ? (
@@ -202,9 +216,16 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       </motion.header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex gap-6 justify-center">
           {/* 問題・回答エリア */}
-          <div className="space-y-4">
+          <motion.div 
+            className="space-y-4 w-full"
+            animate={{ 
+              maxWidth: showAnswers ? '600px' : '800px',
+              x: showAnswers ? -50 : 0 
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -282,7 +303,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                 </Button>
               </motion.div>
             )}
-          </div>
+          </motion.div>
 
           {/* 答え表示エリア (答えを見るモード時) */}
           <AnimatePresence>
@@ -371,6 +392,27 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 答え表示確認ダイアログ */}
+      <AlertDialog open={showAnswersConfirm} onOpenChange={setShowAnswersConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              答えを表示しますか？
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              答えを見ると、自分で考える機会が減ってしまいます。まずは自分で解いてみましょう。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmShowAnswers}>
+              答えを見る
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 未完了警告ダイアログ */}
       <AlertDialog open={showIncompleteWarning} onOpenChange={setShowIncompleteWarning}>
@@ -554,9 +596,19 @@ function ElementDisplay({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
-          className="flex items-center justify-center h-48 bg-muted rounded-xl"
+          className="rounded-xl overflow-hidden"
         >
-          <p className="text-muted-foreground">画像</p>
+          {element.imageUrl ? (
+            <img 
+              src={element.imageUrl} 
+              alt={element.imageAlt || element.content}
+              className="max-h-64 mx-auto rounded-xl"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-48 bg-muted rounded-xl">
+              <p className="text-muted-foreground">画像</p>
+            </div>
+          )}
         </motion.div>
       )
 
@@ -569,6 +621,22 @@ function ElementDisplay({
           className="flex items-center justify-center h-64 bg-muted rounded-xl"
         >
           <p className="text-muted-foreground">地図</p>
+        </motion.div>
+      )
+
+    case 'embed':
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.03 }}
+          className="rounded-xl overflow-hidden bg-muted/30 p-4"
+        >
+          {element.embedHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: element.embedHtml }} />
+          ) : (
+            <p className="text-muted-foreground text-center">埋め込みコンテンツ</p>
+          )}
         </motion.div>
       )
 

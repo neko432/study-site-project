@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Plus, 
@@ -15,12 +15,32 @@ import {
   Upload,
   Edit3,
   Trash2,
-  Eye
+  Eye,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useAppStore } from '@/lib/store'
 import { AssignmentEditor } from './assignment-editor'
 import { SubmissionViewer } from './submission-viewer'
@@ -28,10 +48,71 @@ import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 export function TeacherDashboard() {
-  const { logout, assignments, templates, submissions } = useAppStore()
+  const { logout, assignments, templates, submissions, deleteAssignment } = useAppStore()
   const [activeTab, setActiveTab] = useState('overview')
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null)
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [darkMode, setDarkMode] = useState(false)
+  const printRef = useRef<HTMLDivElement>(null)
+
+  const handlePrint = (assignmentId: string) => {
+    const assignment = assignments.find(a => a.id === assignmentId)
+    if (!assignment) return
+    
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${assignment.title}</title>
+        <style>
+          body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; padding: 40px; line-height: 1.6; }
+          h1 { font-size: 24px; margin-bottom: 8px; }
+          h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; }
+          p { margin: 8px 0; }
+          .question { margin-top: 16px; font-weight: 500; }
+          .answer-box { display: inline-flex; align-items: center; gap: 8px; margin: 8px 0; }
+          .answer-box .label { background: #f3f4f6; padding: 4px 12px; border-radius: 4px; font-weight: 500; }
+          .answer-box .input { border-bottom: 1px solid #000; min-width: 150px; height: 24px; }
+          .deadline { color: #666; font-size: 14px; margin-bottom: 24px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>${assignment.title}</h1>
+        <p class="deadline">期限: ${new Date(assignment.deadline).toLocaleDateString('ja-JP')} ${new Date(assignment.deadline).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</p>
+        ${assignment.description ? `<p>${assignment.description}</p>` : ''}
+        ${assignment.elements.map(el => {
+          switch(el.type) {
+            case 'heading': return `<h2>${el.content}</h2>`
+            case 'text': return `<p>${el.content}</p>`
+            case 'question-label': return `<p class="question">${el.content}</p>`
+            case 'answer-box': return `<div class="answer-box"><span class="label">${el.content}</span><span class="input"></span></div>`
+            case 'divider': return '<hr />'
+            default: return ''
+          }
+        }).join('')}
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
+  const handleDeleteConfirm = () => {
+    if (deleteConfirmId) {
+      deleteAssignment(deleteConfirmId)
+      setDeleteConfirmId(null)
+    }
+  }
+
+  const handleStatsClick = (tab: string) => {
+    setActiveTab(tab)
+  }
 
   const publishedAssignments = assignments.filter(a => a.status === 'published')
   const scheduledAssignments = assignments.filter(a => a.status === 'scheduled')
@@ -76,7 +157,7 @@ export function TeacherDashboard() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" onClick={() => setShowSettingsModal(true)}>
               <Settings className="w-5 h-5" />
             </Button>
             <Button variant="ghost" onClick={logout} className="gap-2">
@@ -104,24 +185,28 @@ export function TeacherDashboard() {
                 title="公開中の課題"
                 value={publishedAssignments.length}
                 color="primary"
+                onClick={() => handleStatsClick('assignments')}
               />
               <StatsCard
                 icon={<Clock className="w-6 h-6" />}
                 title="予約投稿"
                 value={scheduledAssignments.length}
                 color="accent"
+                onClick={() => handleStatsClick('assignments')}
               />
               <StatsCard
                 icon={<Edit3 className="w-6 h-6" />}
                 title="下書き"
                 value={draftAssignments.length}
                 color="muted"
+                onClick={() => handleStatsClick('assignments')}
               />
               <StatsCard
                 icon={<Users className="w-6 h-6" />}
                 title="総提出数"
                 value={submissions.length}
                 color="secondary"
+                onClick={() => handleStatsClick('submissions')}
               />
             </div>
 
@@ -294,19 +379,21 @@ export function TeacherDashboard() {
                           >
                             <Edit3 className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+<Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handlePrint(assignment.id)}
+                                          >
+                                            <Printer className="w-4 h-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => setDeleteConfirmId(assignment.id)}
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </Button>
                         </div>
                       </div>
                     </CardContent>
@@ -468,6 +555,78 @@ export function TeacherDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Settings Modal */}
+      <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              設定
+            </DialogTitle>
+            <DialogDescription>
+              アプリケーションの設定を変更できます
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="dark-mode">ダークモード</Label>
+                <p className="text-sm text-muted-foreground">
+                  暗い配色に切り替えます
+                </p>
+              </div>
+              <Switch
+                id="dark-mode"
+                checked={darkMode}
+                onCheckedChange={(checked) => {
+                  setDarkMode(checked)
+                  document.documentElement.classList.toggle('dark', checked)
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label>通知</Label>
+                <p className="text-sm text-muted-foreground">
+                  提出時の通知を受け取ります
+                </p>
+              </div>
+              <Switch defaultChecked />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label>自動保存</Label>
+                <p className="text-sm text-muted-foreground">
+                  編集内容を自動的に保存します
+                </p>
+              </div>
+              <Switch defaultChecked />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>課題を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。課題に関連する全てのデータ（提出物を含む）が削除されます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -476,17 +635,19 @@ function StatsCard({
   icon,
   title,
   value,
-  color
+  color,
+  onClick
 }: {
   icon: React.ReactNode
   title: string
   value: number
   color: 'primary' | 'secondary' | 'accent' | 'muted'
+  onClick?: () => void
 }) {
   const bgColors = {
     primary: 'bg-primary/10',
-    secondary: 'bg-secondary/30',
-    accent: 'bg-accent/30',
+    secondary: 'bg-secondary',
+    accent: 'bg-accent',
     muted: 'bg-muted'
   }
   
@@ -500,7 +661,10 @@ function StatsCard({
   return (
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+      onClick={onClick}
+      className="cursor-pointer"
     >
       <Card className="overflow-hidden">
         <CardContent className="p-6">
