@@ -66,7 +66,6 @@ const ELEMENT_TYPES: { type: ElementType; icon: React.ReactNode; label: string }
   { type: 'text', icon: <Type className="w-4 h-4" />, label: 'テキスト' },
   { type: 'answer-box', icon: <FileQuestion className="w-4 h-4" />, label: '解答欄' },
   { type: 'question-label', icon: <List className="w-4 h-4" />, label: '問題番号' },
-  { type: 'katakana-marker', icon: <span className="text-sm font-bold">(ア)</span>, label: 'カタカナ' },
   { type: 'divider', icon: <Minus className="w-4 h-4" />, label: '区切り線' },
   { type: 'image', icon: <Image className="w-4 h-4" />, label: '画像' },
   { type: 'map', icon: <Map className="w-4 h-4" />, label: '地図' },
@@ -299,26 +298,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 </motion.div>
               ))}
 
-              {/* カタカナクイック選択 */}
-              <div className="pt-4 border-t">
-                <p className="text-sm text-muted-foreground mb-2">カタカナ記号</p>
-                <div className="grid grid-cols-5 gap-1">
-                  {KATAKANA_MARKERS.slice(0, 10).map((marker, index) => (
-                    <motion.button
-                      key={marker}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-2 text-sm rounded-lg bg-muted hover:bg-accent transition-colors"
-                      onClick={() => {
-                        setKatakanaIndex(index)
-                        addElement('katakana-marker')
-                      }}
-                    >
-                      ({marker})
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
+
             </CardContent>
           </Card>
         </motion.aside>
@@ -426,24 +406,46 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           {/* 期限設定 */}
           <Card>
             <CardContent className="pt-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <Label className="text-sm text-muted-foreground">提出期限:</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-64">
+                    <Button variant="outline" className="w-48">
                       <Calendar className="w-4 h-4 mr-2" />
-                      {format(deadline, 'yyyy年M月d日 HH:mm', { locale: ja })}
+                      {format(deadline, 'yyyy年M月d日', { locale: ja })}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <CalendarComponent
                       mode="single"
                       selected={deadline}
-                      onSelect={(date) => date && setDeadline(date)}
+                      onSelect={(date) => {
+                        if (date) {
+                          const newDate = new Date(date)
+                          newDate.setHours(deadline.getHours())
+                          newDate.setMinutes(deadline.getMinutes())
+                          setDeadline(newDate)
+                        }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
                 </Popover>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="time"
+                    value={format(deadline, 'HH:mm')}
+                    onChange={(e) => {
+                      const [hours, minutes] = e.target.value.split(':').map(Number)
+                      const newDate = new Date(deadline)
+                      newDate.setHours(hours)
+                      newDate.setMinutes(minutes)
+                      setDeadline(newDate)
+                    }}
+                    className="w-28"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -729,6 +731,25 @@ function ElementProperties({
             className="mt-1"
             placeholder="ア, イ, など"
           />
+          <div className="mt-2">
+            <p className="text-xs text-muted-foreground mb-1">カタカナ記号を選択:</p>
+            <div className="flex flex-wrap gap-1">
+              {KATAKANA_MARKERS.map((marker) => (
+                <button
+                  key={marker}
+                  type="button"
+                  onClick={() => onUpdate({ content: marker })}
+                  className={`w-7 h-7 text-xs rounded border transition-colors ${
+                    element.content === marker
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted hover:bg-accent border-border'
+                  }`}
+                >
+                  {marker}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <div>
           <Label className="text-sm">正解</Label>

@@ -1,7 +1,7 @@
 # Study Site Project / 学習サイトプロジェクト
 
-> **Note:** This is an early version (v0.1.0) with known bugs. Work in progress.
-> **注意:** これは初期バージョン (v0.1.0) です。既知のバグが多数あります。開発中。
+> **Note:** This is v0.2.0. Work in progress.
+> **注意:** これはv0.2.0です。開発中。
 
 ---
 
@@ -55,7 +55,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Project Status
 
-This is a work in progress. The repository is used to track progress over time.
+Work in progress. The repository is used to track progress over time.
 
 ---
 
