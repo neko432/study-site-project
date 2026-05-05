@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
@@ -11,7 +11,8 @@ import {
   Check,
   Clock,
   RotateCcw,
-  BookOpen
+  BookOpen,
+  Save
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,6 +69,8 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [viewMode, setViewMode] = useState<'work' | 'review'>('work')
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   if (!assignment) {
     return (
@@ -78,12 +81,74 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   }
 
   const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
+  
+  // 答え番号のマッピングを作成
+  const answerIndexMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    answerElements.forEach((el, idx) => {
+      map[el.id] = idx + 1
+    })
+    return map
+  }, [answerElements])
+  
   const filledCount = answerElements.filter(e => answers[e.id]?.trim()).length
   const totalCount = answerElements.length
   const progress = (filledCount / totalCount) * 100
   const isComplete = filledCount === totalCount
   const isOverdue = isPast(new Date(assignment.deadline))
   const isSubmitted = existingSubmission?.status === 'submitted'
+
+  // 自動保存機能
+  const autoSaveProgress = useCallback(() => {
+    if (Object.keys(answers).length > 0 && !isSubmitted) {
+      const submissionData = {
+        answers,
+        submittedAt: new Date(),
+        status: 'in-progress' as const
+      }
+
+      if (existingSubmission) {
+        updateSubmission(existingSubmission.id, submissionData)
+      } else {
+        addSubmission({
+          id: `submission-${Date.now()}`,
+          assignmentId,
+          studentId: currentStudentId,
+          studentName: '生徒',
+          answers,
+          submittedAt: new Date(),
+          history: [],
+          status: 'in-progress'
+        })
+      }
+      setLastSaved(new Date())
+    }
+  }, [answers, isSubmitted, existingSubmission, updateSubmission, addSubmission, assignmentId, currentStudentId])
+
+  // 回答が変更されたら自動保存（デバウンス付き）
+  useEffect(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current)
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      autoSaveProgress()
+    }, 3000) // 3秒後に自動保存
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [answers, autoSaveProgress])
+
+  // ページを離れる前に保存
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      autoSaveProgress()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [autoSaveProgress])
 
   const handleAnswerChange = (elementId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [elementId]: value }))
@@ -168,6 +233,12 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                   {isSubmitted && (
                     <Badge className="bg-success text-success-foreground text-xs">提出済み</Badge>
                   )}
+                  {lastSaved && !isSubmitted && (
+                    <Badge variant="outline" className="text-xs flex items-center gap-1">
+                      <Save className="w-3 h-3" />
+                      保存済み
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -240,6 +311,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                         showAnswer={showAnswers}
                         isSubmitted={isSubmitted && !isOverdue ? false : isSubmitted}
                         isOverdue={isOverdue}
+                        answerNumber={answerIndexMap[element.id]}
                       />
                     ))}
                   </div>
@@ -321,9 +393,14 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                             className="p-4 rounded-xl bg-card border"
                           >
                             <div className="flex items-start gap-3">
-                              <Badge variant="outline" className="shrink-0">
-                                {element.content}
-                              </Badge>
+                              <div className="flex flex-col items-center gap-1">
+                                <Badge className="bg-primary/10 text-primary border-primary shrink-0">
+                                  Q{index + 1}
+                                </Badge>
+                                <Badge variant="outline" className="shrink-0 text-xs">
+                                  {element.content}
+                                </Badge>
+                              </div>
                               <div className="flex-1">
                                 <p 
                                   className="text-answer font-medium text-lg"
@@ -360,7 +437,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               答えを表示しますか?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              答えを見ながら回答を確認できます。自分で考えてから見ることをおすすめします。
+              答えを見ながら回答を確認できます。自分で考えてから見ることをお���すめします。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -467,15 +544,17 @@ function ElementDisplay({
   onAnswerChange,
   showAnswer,
   isSubmitted,
-  isOverdue
+  isOverdue,
+  answerNumber
 }: {
-  element: NonNullable<ReturnType<typeof useAppStore>['assignments'][0]>['elements'][0]
+  element: any
   index: number
   answer: string
   onAnswerChange: (value: string) => void
   showAnswer: boolean
   isSubmitted: boolean
   isOverdue: boolean
+  answerNumber?: number
 }) {
   const canEdit = !isSubmitted || !isOverdue
 
@@ -527,9 +606,16 @@ function ElementDisplay({
           transition={{ delay: index * 0.03 }}
           className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border"
         >
-          <Badge variant="outline" className="shrink-0 bg-card">
-            {element.content}
-          </Badge>
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            {answerNumber && (
+              <Badge className="bg-primary/10 text-primary border-primary text-xs">
+                Q{answerNumber}
+              </Badge>
+            )}
+            <Badge variant="outline" className="bg-card">
+              {element.content}
+            </Badge>
+          </div>
           <div className="flex-1 relative">
             <Input
               value={answer}
@@ -580,6 +666,24 @@ function ElementDisplay({
       )
 
     case 'image':
+      if (element.imageUrl) {
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.03 }}
+          >
+            <img 
+              src={element.imageUrl} 
+              alt="課題画像" 
+              className="max-w-full h-auto rounded-xl"
+              style={{ 
+                width: element.style?.width ? `${element.style.width}%` : 'auto'
+              }}
+            />
+          </motion.div>
+        )
+      }
       return (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -600,8 +704,29 @@ function ElementDisplay({
           className="flex items-center justify-center h-64 bg-muted rounded-xl"
         >
           <p className="text-muted-foreground">地図</p>
+          {element.mapPins && element.mapPins.length > 0 && (
+            <p className="text-xs text-primary ml-2">({element.mapPins.length}箇所)</p>
+          )}
         </motion.div>
       )
+
+    case 'embed':
+      if (element.embedHtml) {
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.03 }}
+            className="border rounded-lg p-4 bg-muted/30"
+          >
+            <div 
+              className="embed-content"
+              dangerouslySetInnerHTML={{ __html: element.embedHtml }}
+            />
+          </motion.div>
+        )
+      }
+      return null
 
     default:
       return null

@@ -1,7 +1,7 @@
 # Study Site Project / 学習サイトプロジェクト
 
-> **Note:** This is v0.2.0. Work in progress.
-> **注意:** これはv0.2.0です。開発中。
+> **Note:** This is v0.3.0. Work in progress.
+> **注意:** これはv0.3.0です。開発中。
 
 ---
 
@@ -40,6 +40,21 @@ pnpm dev
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Changelog
+
+#### v0.3.0
+- Clicking an assignment in teacher dashboard "Recent Assignments" now opens the edit screen
+- Assignment list print button now prompts whether to include answers (same as editor print)
+- Role selection screen: student side now has a matching color effect (green) to match teacher's blue
+- Image upload: select from file explorer or drag-and-drop to replace
+- Map feature: popup map display with pin placement
+- Element resize: per-element size control for full PDF reproduction
+- Undo/Redo: history navigation for editor actions
+- Embed feature: insert raw HTML and render inline
+- Auto-scroll on element add: view scrolls to newly added element
+- Drag-to-add elements: drag from element palette to add
+- Answer correspondence clarity: student view clearly shows which answer box matches which question
+- Student progress saving: answers preserved when navigating away and returning
+- Teacher settings button now functional
 
 #### v0.2.0
 - Color scheme update: removed gradients, switched to simple blue and gray base
@@ -94,6 +109,21 @@ pnpm dev
 ブラウザで [http://localhost:3000](http://localhost:3000) を開いてください。
 
 ### 変更履歴
+
+#### v0.3.0
+- 先生ダッシュボードの「最近の課題」をクリックすると編集画面を開くように
+- 課題一覧の印刷ボタンで答えを含むか選択してから印刷（編集画面の印刷と同じ挙動）
+- ロール選択画面：生徒側にも先生（青）と相性のいい色（緑）のエフェクトを追加
+- 画像アップロード：エクスプローラーから選択またはドラッグで画像置き換え
+- 地図機能：ポップアップでマップ表示、ピン設置
+- 各項目の大きさ変更：PDF完全再現用のリサイズ機能
+- Undo/Redo：エディターの操作を戻す/進める
+- 埋め込み機能：HTML入力してインライン表示
+- 要素追加時の自動スクロール：追加した要素に自動スクロール
+- ドラッグで要素追加：要素ボタンをドラッグしても追加可能
+- 答えの対応をわかりやすく：生徒側でどれがどれの答えか明確に表示
+- 生徒の進捗保存：途中で戻っても回答が保存される
+- 先生側の設定ボタンを機能させる
 
 #### v0.2.0
 - カラースキーム更新: グラデーション廃止、シンプルな青とグレーベースに変更

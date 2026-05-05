@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import {
   ArrowLeft,
@@ -21,7 +21,11 @@ import {
   X,
   Copy,
   Check,
-  Clock
+  Clock,
+  Code,
+  Undo2,
+  Redo2,
+  MapPin
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +55,7 @@ import {
 } from '@/components/ui/popover'
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Slider } from '@/components/ui/slider'
 import { useAppStore } from '@/lib/store'
 import { KATAKANA_MARKERS, type EditorElement, type ElementType } from '@/lib/types'
 import { format } from 'date-fns'
@@ -69,6 +74,7 @@ const ELEMENT_TYPES: { type: ElementType; icon: React.ReactNode; label: string }
   { type: 'divider', icon: <Minus className="w-4 h-4" />, label: '区切り線' },
   { type: 'image', icon: <Image className="w-4 h-4" />, label: '画像' },
   { type: 'map', icon: <Map className="w-4 h-4" />, label: '地図' },
+  { type: 'embed', icon: <Code className="w-4 h-4" />, label: 'HTML埋め込み' },
 ]
 
 export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps) {
@@ -97,35 +103,112 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
   const [templateName, setTemplateName] = useState('')
+  
+  // Undo/Redo 履歴
+  const [history, setHistory] = useState<EditorElement[][]>([existingAssignment?.elements || []])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  
+  // 自動スクロール用のref
+  const editorRef = useRef<HTMLDivElement>(null)
+  const lastAddedElementRef = useRef<string | null>(null)
+  
+  // ドラッグ＆ドロップ用の状態
+  const [isDraggingElement, setIsDraggingElement] = useState(false)
+  const [draggedElementType, setDraggedElementType] = useState<ElementType | null>(null)
 
   const generateId = () => `element-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
+  // 履歴に保存
+  const saveToHistory = useCallback((newElements: EditorElement[]) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1)
+      return [...newHistory, newElements]
+    })
+    setHistoryIndex(prev => prev + 1)
+  }, [historyIndex])
+
+  // Undo
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      setHistoryIndex(prev => prev - 1)
+      setElements(history[historyIndex - 1])
+    }
+  }, [historyIndex, history])
+
+  // Redo
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(prev => prev + 1)
+      setElements(history[historyIndex + 1])
+    }
+  }, [historyIndex, history])
+
+  const canUndo = historyIndex > 0
+  const canRedo = historyIndex < history.length - 1
 
   const addElement = useCallback((type: ElementType) => {
     const newElement: EditorElement = {
       id: generateId(),
       type,
       content: getDefaultContent(type, katakanaIndex),
-      ...(type === 'answer-box' && { answer: '', importantPoint: '' })
+      ...(type === 'answer-box' && { answer: '', importantPoint: '' }),
+      ...(type === 'image' && { imageUrl: '' }),
+      ...(type === 'map' && { mapPins: [] }),
+      ...(type === 'embed' && { embedHtml: '' })
     }
     
     if (type === 'katakana-marker') {
       setKatakanaIndex(prev => (prev + 1) % KATAKANA_MARKERS.length)
     }
     
-    setElements(prev => [...prev, newElement])
+    const newElements = [...elements, newElement]
+    setElements(newElements)
+    saveToHistory(newElements)
     setSelectedElement(newElement.id)
-  }, [katakanaIndex])
+    lastAddedElementRef.current = newElement.id
+  }, [katakanaIndex, elements, saveToHistory])
+
+  // 自動スクロール
+  useEffect(() => {
+    if (lastAddedElementRef.current && editorRef.current) {
+      const elementNode = document.getElementById(`element-${lastAddedElementRef.current}`)
+      if (elementNode) {
+        elementNode.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        lastAddedElementRef.current = null
+      }
+    }
+  }, [elements])
+
+  // キーボードショートカット
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo, handleRedo])
 
   const updateElement = useCallback((id: string, updates: Partial<EditorElement>) => {
-    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el))
-  }, [])
+    const newElements = elements.map(el => el.id === id ? { ...el, ...updates } : el)
+    setElements(newElements)
+    // Debounce history saving for text updates
+  }, [elements])
 
   const deleteElement = useCallback((id: string) => {
-    setElements(prev => prev.filter(el => el.id !== id))
+    const newElements = elements.filter(el => el.id !== id)
+    setElements(newElements)
+    saveToHistory(newElements)
     if (selectedElement === id) {
       setSelectedElement(null)
     }
-  }, [selectedElement])
+  }, [selectedElement, elements, saveToHistory])
 
   const duplicateElement = useCallback((id: string) => {
     const element = elements.find(el => el.id === id)
@@ -250,6 +333,26 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             />
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 mr-2 border-r pr-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleUndo} 
+                disabled={!canUndo}
+                title="元に戻す (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleRedo} 
+                disabled={!canRedo}
+                title="やり直し (Ctrl+Y)"
+              >
+                <Redo2 className="w-4 h-4" />
+              </Button>
+            </div>
             <Button variant="outline" onClick={() => setShowPrintDialog(true)}>
               <Printer className="w-4 h-4 mr-2" />
               印刷
@@ -289,8 +392,19 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 <motion.div key={item.type} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     variant="outline"
-                    className="w-full justify-start gap-3 h-10"
+                    className="w-full justify-start gap-3 h-10 cursor-grab active:cursor-grabbing"
                     onClick={() => addElement(item.type)}
+                    draggable
+                    onDragStart={(e) => {
+                      setIsDraggingElement(true)
+                      setDraggedElementType(item.type)
+                      e.dataTransfer.setData('elementType', item.type)
+                      e.dataTransfer.effectAllowed = 'copy'
+                    }}
+                    onDragEnd={() => {
+                      setIsDraggingElement(false)
+                      setDraggedElementType(null)
+                    }}
                   >
                     {item.icon}
                     {item.label}
@@ -322,12 +436,28 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           </Card>
 
           {/* エディターキャンバス */}
-          <Card className="min-h-[600px]">
-            <CardContent className="p-6">
+          <Card className={`min-h-[600px] transition-colors ${isDraggingElement ? 'border-primary border-2 border-dashed' : ''}`}>
+            <CardContent 
+              className="p-6" 
+              ref={editorRef}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const elementType = e.dataTransfer.getData('elementType') as ElementType
+                if (elementType) {
+                  addElement(elementType)
+                }
+                setIsDraggingElement(false)
+                setDraggedElementType(null)
+              }}
+            >
               {elements.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
+                <div className={`flex flex-col items-center justify-center h-96 text-muted-foreground rounded-xl transition-colors ${isDraggingElement ? 'bg-primary/5' : ''}`}>
                   <Plus className="w-12 h-12 mb-4" />
-                  <p>左のパネルから要素を追加してください</p>
+                  <p>{isDraggingElement ? 'ここにドロップして追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
                 </div>
               ) : (
                 <Reorder.Group
@@ -342,6 +472,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                         key={element.id}
                         value={element}
                         className="relative"
+                        id={`element-${element.id}`}
                       >
                         <motion.div
                           layout
@@ -689,12 +820,78 @@ function ElementRenderer({
       return <hr className="border-t-2 border-border" />
     
     case 'image':
-      return (
-        <div className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed">
-          <div className="text-center">
-            <Image className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">画像をアップロード</p>
+      const handleImageUpload = (file: File) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            onUpdate({ imageUrl: e.target.result as string })
+          }
+        }
+        reader.readAsDataURL(file)
+      }
+
+      const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        const file = e.dataTransfer.files[0]
+        if (file && file.type.startsWith('image/')) {
+          handleImageUpload(file)
+        }
+      }
+
+      const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+          handleImageUpload(file)
+        }
+      }
+
+      if (element.imageUrl) {
+        return (
+          <div 
+            className="relative group"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+          >
+            <img 
+              src={element.imageUrl} 
+              alt="アップロード画像" 
+              className="max-w-full h-auto rounded-lg"
+              style={{ 
+                width: element.style?.width ? `${element.style.width}%` : 'auto',
+                height: element.style?.height ? `${element.style.height}px` : 'auto'
+              }}
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+              <label className="cursor-pointer text-white text-sm">
+                クリックまたはドラッグで置き換え
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </label>
+            </div>
           </div>
+        )
+      }
+
+      return (
+        <div 
+          className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed cursor-pointer hover:border-primary transition-colors"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <label className="cursor-pointer text-center">
+            <Image className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">クリックまたはドラッグで画像をアップロード</p>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+          </label>
         </div>
       )
     
@@ -703,7 +900,30 @@ function ElementRenderer({
         <div className="flex items-center justify-center h-48 bg-muted rounded-lg border-2 border-dashed">
           <div className="text-center">
             <Map className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">地図を追加</p>
+            <p className="text-sm text-muted-foreground">地図を追加（プロパティで設定）</p>
+            {element.mapPins && element.mapPins.length > 0 && (
+              <p className="text-xs text-primary mt-1">{element.mapPins.length}個のピンが設定済み</p>
+            )}
+          </div>
+        </div>
+      )
+
+    case 'embed':
+      if (element.embedHtml) {
+        return (
+          <div className="border rounded-lg p-4 bg-muted/30">
+            <div 
+              className="embed-content"
+              dangerouslySetInnerHTML={{ __html: element.embedHtml }}
+            />
+          </div>
+        )
+      }
+      return (
+        <div className="flex items-center justify-center h-32 bg-muted rounded-lg border-2 border-dashed">
+          <div className="text-center">
+            <Code className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">HTML埋め込み（プロパティで設定）</p>
           </div>
         </div>
       )
@@ -796,14 +1016,154 @@ function ElementProperties({
     )
   }
 
+  if (element.type === 'image') {
+    return (
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm">幅 (%)</Label>
+          <Slider
+            value={[element.style?.width || 100]}
+            onValueChange={([value]) => onUpdate({ style: { ...element.style, width: value } })}
+            min={10}
+            max={100}
+            step={5}
+            className="mt-2"
+          />
+          <p className="text-xs text-muted-foreground mt-1">{element.style?.width || 100}%</p>
+        </div>
+        {element.imageUrl && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full"
+            onClick={() => onUpdate({ imageUrl: '' })}
+          >
+            画像を削除
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  if (element.type === 'map') {
+    const [newPin, setNewPin] = useState({ lat: '', lng: '', label: '' })
+    
+    const addPin = () => {
+      if (newPin.lat && newPin.lng) {
+        const pins = element.mapPins || []
+        onUpdate({ 
+          mapPins: [...pins, { 
+            lat: parseFloat(newPin.lat), 
+            lng: parseFloat(newPin.lng), 
+            label: newPin.label 
+          }] 
+        })
+        setNewPin({ lat: '', lng: '', label: '' })
+      }
+    }
+
+    const removePin = (index: number) => {
+      const pins = element.mapPins || []
+      onUpdate({ mapPins: pins.filter((_, i) => i !== index) })
+    }
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm">ピンを追加</Label>
+          <div className="space-y-2 mt-2">
+            <Input
+              placeholder="緯度 (例: 35.6762)"
+              value={newPin.lat}
+              onChange={(e) => setNewPin({ ...newPin, lat: e.target.value })}
+            />
+            <Input
+              placeholder="経度 (例: 139.6503)"
+              value={newPin.lng}
+              onChange={(e) => setNewPin({ ...newPin, lng: e.target.value })}
+            />
+            <Input
+              placeholder="ラベル (任意)"
+              value={newPin.label}
+              onChange={(e) => setNewPin({ ...newPin, label: e.target.value })}
+            />
+            <Button size="sm" onClick={addPin} className="w-full">
+              ピンを追加
+            </Button>
+          </div>
+        </div>
+        {element.mapPins && element.mapPins.length > 0 && (
+          <div>
+            <Label className="text-sm">設定済みのピン</Label>
+            <div className="space-y-2 mt-2">
+              {element.mapPins.map((pin, index) => (
+                <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                  <span className="flex-1">{pin.label || `ピン${index + 1}`}: ({pin.lat}, {pin.lng})</span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6"
+                    onClick={() => removePin(index)}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (element.type === 'embed') {
+    return (
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm">HTMLコード</Label>
+          <Textarea
+            value={element.embedHtml || ''}
+            onChange={(e) => onUpdate({ embedHtml: e.target.value })}
+            className="mt-1 font-mono text-xs"
+            placeholder="<iframe>...</iframe>"
+            rows={6}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            iframe、動画、その他のHTMLを埋め込み
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div>
-      <Label className="text-sm">コンテンツ</Label>
-      <Textarea
-        value={element.content}
-        onChange={(e) => onUpdate({ content: e.target.value })}
-        className="mt-1"
-      />
+    <div className="space-y-4">
+      <div>
+        <Label className="text-sm">コンテンツ</Label>
+        <Textarea
+          value={element.content}
+          onChange={(e) => onUpdate({ content: e.target.value })}
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label className="text-sm">フォントサイズ</Label>
+        <Select
+          value={element.style?.fontSize || 'default'}
+          onValueChange={(value) => onUpdate({ style: { ...element.style, fontSize: value === 'default' ? undefined : value } })}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="デフォルト" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">デフォルト</SelectItem>
+            <SelectItem value="0.75rem">小</SelectItem>
+            <SelectItem value="1rem">中</SelectItem>
+            <SelectItem value="1.25rem">大</SelectItem>
+            <SelectItem value="1.5rem">特大</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }

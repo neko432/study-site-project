@@ -31,6 +31,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/lib/store'
 import { AssignmentEditor } from './assignment-editor'
 import { SubmissionViewer } from './submission-viewer'
@@ -44,6 +57,13 @@ export function TeacherDashboard() {
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [assignmentToPrint, setAssignmentToPrint] = useState<string | null>(null)
+  const [printWithAnswers, setPrintWithAnswers] = useState(true)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [teacherPassword, setTeacherPassword] = useState('')
+  const [showAnswersByDefault, setShowAnswersByDefault] = useState(false)
+  const [allowResubmission, setAllowResubmission] = useState(true)
 
   const handleDeleteClick = (assignmentId: string) => {
     setAssignmentToDelete(assignmentId)
@@ -59,10 +79,50 @@ export function TeacherDashboard() {
   }
 
   const handlePrint = (assignmentId: string) => {
-    const assignment = assignments.find(a => a.id === assignmentId)
+    setAssignmentToPrint(assignmentId)
+    setPrintDialogOpen(true)
+  }
+
+  const handleConfirmPrint = () => {
+    const assignment = assignments.find(a => a.id === assignmentToPrint)
     if (assignment) {
+      // Create a print-friendly version
+      const printContent = document.createElement('div')
+      const elementsHtml = assignment.elements.map(el => {
+        if (el.type === 'heading') return `<h2 style="font-size: 20px; margin-top: 16px;">${el.content}</h2>`
+        if (el.type === 'text') return `<p style="margin: 8px 0;">${el.content}</p>`
+        if (el.type === 'question-label') return `<p style="font-weight: bold; margin-top: 12px;">${el.content}</p>`
+        if (el.type === 'answer-box') return `
+          <div class="answer-box">
+            <span>(${el.content})</span>
+            ${printWithAnswers ? `<span class="answer"> ${el.answer || ''}</span>` : ''}
+          </div>`
+        if (el.type === 'divider') return '<hr style="margin: 16px 0;" />'
+        return ''
+      }).join('')
+
+      printContent.innerHTML = `
+        <style>
+          @media print {
+            body * { visibility: hidden; }
+            .print-content, .print-content * { visibility: visible; }
+            .print-content { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+            .answer-box { border: 1px solid #333; padding: 8px; margin: 4px 0; min-height: 30px; }
+            .answer { color: red; font-weight: bold; }
+          }
+        </style>
+        <div class="print-content">
+          <h1 style="font-size: 24px; margin-bottom: 16px;">${assignment.title}</h1>
+          <p style="margin-bottom: 16px;">${assignment.description}</p>
+          ${elementsHtml}
+        </div>
+      `
+      document.body.appendChild(printContent)
       window.print()
+      document.body.removeChild(printContent)
     }
+    setPrintDialogOpen(false)
+    setAssignmentToPrint(null)
   }
 
   const publishedAssignments = assignments.filter(a => a.status === 'published')
@@ -108,7 +168,7 @@ export function TeacherDashboard() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" onClick={() => setSettingsDialogOpen(true)}>
               <Settings className="w-5 h-5" />
             </Button>
             <Button variant="ghost" onClick={logout} className="gap-2">
@@ -176,7 +236,8 @@ export function TeacherDashboard() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
+                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => setEditingAssignment(assignment.id)}
                     >
                       <div>
                         <p className="font-medium text-foreground">{assignment.title}</p>
@@ -527,6 +588,126 @@ export function TeacherDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 印刷ダイアログ */}
+      <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>印刷オプション</DialogTitle>
+            <DialogDescription>
+              印刷設定を選択してください
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="print-answers-list"
+                checked={printWithAnswers}
+                onCheckedChange={(checked) => setPrintWithAnswers(checked as boolean)}
+              />
+              <Label htmlFor="print-answers-list">答えを含めて印刷する</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleConfirmPrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              印刷
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 設定ダイアログ */}
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              設定
+            </DialogTitle>
+            <DialogDescription>
+              先生用の設定を変更できます
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-6">
+            {/* パスワード変更 */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">パスワード変更</Label>
+              <Input
+                type="password"
+                value={teacherPassword}
+                onChange={(e) => setTeacherPassword(e.target.value)}
+                placeholder="新しいパスワード"
+              />
+              <p className="text-xs text-muted-foreground">
+                空白の場合、パスワードは変更されません
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* 課題設定 */}
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">課題のデフォルト設定</Label>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">生徒の再提出を許可</Label>
+                  <p className="text-xs text-muted-foreground">
+                    提出後も回答を変更できるようにします
+                  </p>
+                </div>
+                <Switch
+                  checked={allowResubmission}
+                  onCheckedChange={setAllowResubmission}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">答えをデフォルトで表示</Label>
+                  <p className="text-xs text-muted-foreground">
+                    生徒側で答えをすぐに見れるようにします
+                  </p>
+                </div>
+                <Switch
+                  checked={showAnswersByDefault}
+                  onCheckedChange={setShowAnswersByDefault}
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* データ管理 */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">データ管理</Label>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1">
+                  データをエクスポート
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1">
+                  データをインポート
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSettingsDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={() => {
+              // 設定を保存する処理
+              setSettingsDialogOpen(false)
+            }}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
