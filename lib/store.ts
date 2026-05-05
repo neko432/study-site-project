@@ -24,11 +24,14 @@ interface AppState {
   // 生徒用
   submissions: StudentSubmission[]
   currentStudentId: string
+  studentName: string
+  studentClass: string
   
   // アクション
   setRole: (role: UserRole) => void
   setAuthenticated: (auth: boolean) => void
   setKeepLoggedIn: (keep: boolean) => void
+  setStudentInfo: (name: string, studentClass: string) => void
   logout: () => void
   
   // 課題管理
@@ -167,11 +170,18 @@ export const useAppStore = create<AppState>()(
       currentEditor: [],
       submissions: [],
       currentStudentId: 'student-1',
+      studentName: '',
+      studentClass: '',
       
       // 認証アクション
       setRole: (role) => set({ role }),
       setAuthenticated: (auth) => set({ isAuthenticated: auth }),
       setKeepLoggedIn: (keep) => set({ keepLoggedIn: keep }),
+      setStudentInfo: (name, studentClass) => set({ 
+        studentName: name, 
+        studentClass,
+        currentStudentId: `${studentClass}-${name}`
+      }),
       logout: () => set({ role: null, isAuthenticated: false }),
       
       // 課題管理
@@ -233,12 +243,16 @@ export const useAppStore = create<AppState>()(
               keepLoggedIn: state.keepLoggedIn,
               assignments: state.assignments,
               templates: state.templates,
-              submissions: state.submissions
+              submissions: state.submissions,
+              studentName: state.studentName,
+              studentClass: state.studentClass
             }
           : {
               assignments: state.assignments,
               templates: state.templates,
-              submissions: state.submissions
+              submissions: state.submissions,
+              studentName: state.studentName,
+              studentClass: state.studentClass
             }
     }
   )

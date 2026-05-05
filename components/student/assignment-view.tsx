@@ -64,6 +64,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   const [showAnswers, setShowAnswers] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false)
+  const [showAnswerConfirm, setShowAnswerConfirm] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [viewMode, setViewMode] = useState<'work' | 'review'>('work')
@@ -173,7 +174,13 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
             <div className="flex items-center gap-2">
               <Button
                 variant={showAnswers ? 'default' : 'outline'}
-                onClick={() => setShowAnswers(!showAnswers)}
+                onClick={() => {
+                  if (showAnswers) {
+                    setShowAnswers(false)
+                  } else {
+                    setShowAnswerConfirm(true)
+                  }
+                }}
                 className="gap-2"
               >
                 {showAnswers ? (
@@ -343,6 +350,30 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* 答え表示確認ダイアログ */}
+      <AlertDialog open={showAnswerConfirm} onOpenChange={setShowAnswerConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              答えを表示しますか?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              答えを見ながら回答を確認できます。自分で考えてから見ることをおすすめします。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>戻る</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowAnswers(true)
+              setShowAnswerConfirm(false)
+            }}>
+              答えを見る
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 提出確認ダイアログ */}
       <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>

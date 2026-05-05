@@ -21,6 +21,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { useAppStore } from '@/lib/store'
 import { AssignmentEditor } from './assignment-editor'
 import { SubmissionViewer } from './submission-viewer'
@@ -28,10 +38,32 @@ import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 export function TeacherDashboard() {
-  const { logout, assignments, templates, submissions } = useAppStore()
+  const { logout, assignments, templates, submissions, deleteAssignment } = useAppStore()
   const [activeTab, setActiveTab] = useState('overview')
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null)
   const [viewingSubmissions, setViewingSubmissions] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null)
+
+  const handleDeleteClick = (assignmentId: string) => {
+    setAssignmentToDelete(assignmentId)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (assignmentToDelete) {
+      deleteAssignment(assignmentToDelete)
+    }
+    setDeleteDialogOpen(false)
+    setAssignmentToDelete(null)
+  }
+
+  const handlePrint = (assignmentId: string) => {
+    const assignment = assignments.find(a => a.id === assignmentId)
+    if (assignment) {
+      window.print()
+    }
+  }
 
   const publishedAssignments = assignments.filter(a => a.status === 'published')
   const scheduledAssignments = assignments.filter(a => a.status === 'scheduled')
@@ -104,24 +136,28 @@ export function TeacherDashboard() {
                 title="公開中の課題"
                 value={publishedAssignments.length}
                 color="primary"
+                onClick={() => setActiveTab('assignments')}
               />
               <StatsCard
                 icon={<Clock className="w-6 h-6" />}
                 title="予約投稿"
                 value={scheduledAssignments.length}
                 color="accent"
+                onClick={() => setActiveTab('assignments')}
               />
               <StatsCard
                 icon={<Edit3 className="w-6 h-6" />}
                 title="下書き"
                 value={draftAssignments.length}
                 color="muted"
+                onClick={() => setActiveTab('assignments')}
               />
               <StatsCard
                 icon={<Users className="w-6 h-6" />}
                 title="総提出数"
                 value={submissions.length}
                 color="secondary"
+                onClick={() => setActiveTab('submissions')}
               />
             </div>
 
@@ -297,6 +333,7 @@ export function TeacherDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => handlePrint(assignment.id)}
                           >
                             <Printer className="w-4 h-4" />
                           </Button>
@@ -304,6 +341,7 @@ export function TeacherDashboard() {
                             variant="ghost"
                             size="icon"
                             className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteClick(assignment.id)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -468,6 +506,27 @@ export function TeacherDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>課題を削除しますか?</AlertDialogTitle>
+            <AlertDialogDescription>
+              この操作は取り消せません。課題に関連するすべてのデータが削除されます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除する
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -476,12 +535,14 @@ function StatsCard({
   icon,
   title,
   value,
-  color
+  color,
+  onClick
 }: {
   icon: React.ReactNode
   title: string
   value: number
   color: 'primary' | 'secondary' | 'accent' | 'muted'
+  onClick?: () => void
 }) {
   const bgColors = {
     primary: 'bg-primary/10',
@@ -500,7 +561,10 @@ function StatsCard({
   return (
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+      onClick={onClick}
+      className="cursor-pointer"
     >
       <Card className="overflow-hidden">
         <CardContent className="p-6">
