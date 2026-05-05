@@ -10,7 +10,8 @@ import {
   Calendar,
   FileText,
   ChevronRight,
-  Filter
+  Filter,
+  Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -18,12 +19,14 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/lib/store'
 import { AssignmentView } from './assignment-view'
+import { StudentSettings } from './student-settings'
 import { format, isPast, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 export function StudentDashboard() {
-  const { logout, assignments, submissions, currentStudentId } = useAppStore()
+  const { logout, assignments, submissions, currentStudentId, studentName } = useAppStore()
   const [selectedAssignment, setSelectedAssignment] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
   const [filter, setFilter] = useState<'all' | 'incomplete' | 'completed'>('all')
 
   // 公開中の課題のみ表示
@@ -62,6 +65,12 @@ export function StudentDashboard() {
     )
   }
 
+  if (showSettings) {
+    return (
+      <StudentSettings onBack={() => setShowSettings(false)} />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* ヘッダー */}
@@ -82,10 +91,18 @@ export function StudentDashboard() {
               {completedCount}/{publishedAssignments.length} 完了
             </Badge>
           </div>
-          <Button variant="ghost" onClick={logout} className="gap-2">
-            <LogOut className="w-4 h-4" />
-            ログアウト
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)} title="設定">
+              <Settings className="w-4 h-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground hidden sm:inline">
+              {studentName}
+            </span>
+            <Button variant="ghost" onClick={logout} className="gap-2">
+              <LogOut className="w-4 h-4" />
+              ログアウト
+            </Button>
+          </div>
         </div>
       </motion.header>
 

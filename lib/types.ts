@@ -25,6 +25,8 @@ export interface EditorElement {
   imageUrl?: string
   mapPins?: { lat: number; lng: number; label?: string }[]
   embedHtml?: string
+  answerCheckType?: AnswerCheckType // AI判定用
+  groupId?: string // 横並び配置用
   style?: {
     fontSize?: string
     fontWeight?: string
@@ -32,6 +34,7 @@ export interface EditorElement {
     textAlign?: 'left' | 'center' | 'right'
     width?: number
     height?: number
+    rotation?: number // 回転角度（度）
   }
   position?: {
     x: number
@@ -69,6 +72,7 @@ export interface StudentSubmission {
   assignmentId: string
   studentId: string
   studentName: string
+  studentClass: string // クラス名
   answers: Record<string, string> // elementId -> answer
   submittedAt: Date
   history: {
@@ -76,6 +80,16 @@ export interface StudentSubmission {
     submittedAt: Date
   }[]
   status: 'in-progress' | 'submitted'
+}
+
+// 解答の判定タイプ（AI判定機能の基盤）
+export type AnswerCheckType = 'exact' | 'flexible' | 'ai'
+
+// 要素グループ（横並び配置用）
+export interface ElementGroup {
+  id: string
+  elementIds: string[]
+  layout: 'horizontal' | 'vertical'
 }
 
 // カタカナマーカーの種類

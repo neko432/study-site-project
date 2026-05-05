@@ -32,6 +32,7 @@ interface AppState {
   setAuthenticated: (auth: boolean) => void
   setKeepLoggedIn: (keep: boolean) => void
   setStudentInfo: (name: string, studentClass: string) => void
+  updateStudentInfo: (name: string, studentClass: string) => void
   logout: () => void
   
   // 課題管理
@@ -181,6 +182,22 @@ export const useAppStore = create<AppState>()(
         studentName: name, 
         studentClass,
         currentStudentId: `${studentClass}-${name}`
+      }),
+      updateStudentInfo: (name, studentClass) => set((state) => {
+        const oldStudentId = state.currentStudentId
+        const newStudentId = `${studentClass}-${name}`
+        // 提出履歴の studentId も更新
+        const updatedSubmissions = state.submissions.map(s => 
+          s.studentId === oldStudentId 
+            ? { ...s, studentId: newStudentId, studentName: name, studentClass }
+            : s
+        )
+        return { 
+          studentName: name, 
+          studentClass,
+          currentStudentId: newStudentId,
+          submissions: updatedSubmissions
+        }
       }),
       logout: () => set({ role: null, isAuthenticated: false }),
       

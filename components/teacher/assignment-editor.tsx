@@ -25,7 +25,9 @@ import {
   Code,
   Undo2,
   Redo2,
-  MapPin
+  MapPin,
+  Layers,
+  LayoutList
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,6 +60,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Slider } from '@/components/ui/slider'
 import { useAppStore } from '@/lib/store'
 import { KATAKANA_MARKERS, type EditorElement, type ElementType } from '@/lib/types'
+import { AnswerBoxSelector } from '@/components/editor/answer-box-selector'
+import { ResizeHandles } from '@/components/editor/resize-handles'
+import { PrintDialog } from '@/components/print/print-dialog'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -103,6 +108,8 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
   const [templateName, setTemplateName] = useState('')
+  const [showAnswerBoxSelector, setShowAnswerBoxSelector] = useState(false)
+  const [selectedElements, setSelectedElements] = useState<string[]>([]) // 複数選択用
   
   // Undo/Redo 履歴
   const [history, setHistory] = useState<EditorElement[][]>([existingAssignment?.elements || []])
@@ -147,6 +154,12 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const canRedo = historyIndex < history.length - 1
 
   const addElement = useCallback((type: ElementType) => {
+    // 解答欄の場合はセレクターを表示
+    if (type === 'answer-box') {
+      setShowAnswerBoxSelector(true)
+      return
+    }
+    
     const newElement: EditorElement = {
       id: generateId(),
       type,
@@ -167,6 +180,79 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
     setSelectedElement(newElement.id)
     lastAddedElementRef.current = newElement.id
   }, [katakanaIndex, elements, saveToHistory])
+
+  // 複数の解答欄を一度に追加
+  const addAnswerBoxes = useCallback((labels: string[]) => {
+    const newElements = labels.map(label => ({
+      id: generateId(),
+      type: 'answer-box' as ElementType,
+      content: label,
+      answer: '',
+      importantPoint: ''
+    }))
+    
+    const updatedElements = [...elements, ...newElements]
+    setElements(updatedElements)
+    saveToHistory(updatedElements)
+    
+    if (newElements.length > 0) {
+      setSelectedElement(newElements[newElements.length - 1].id)
+      lastAddedElementRef.current = newElements[newElements.length - 1].id
+    }
+  }, [elements, saveToHistory])
+
+  // 使用中のラベルを取得
+  const usedLabels = elements
+    .filter(e => e.type === 'answer-box')
+    .map(e => e.content)
+
+  // 要素のグループ化（横並び）
+  const groupElements = useCallback((elementIds: string[]) => {
+    if (elementIds.length < 2) return
+    
+    const groupId = `group-${Date.now()}`
+    const newElements = elements.map(el => 
+      elementIds.includes(el.id) ? { ...el, groupId } : el
+    )
+    setElements(newElements)
+    saveToHistory(newElements)
+    setSelectedElements([])
+  }, [elements, saveToHistory])
+
+  // グループ解除
+  const ungroupElements = useCallback((groupId: string) => {
+    const newElements = elements.map(el => 
+      el.groupId === groupId ? { ...el, groupId: undefined } : el
+    )
+    setElements(newElements)
+    saveToHistory(newElements)
+  }, [elements, saveToHistory])
+
+  // グループされた要素を取得
+  const getElementGroups = useCallback(() => {
+    const groups: Record<string, EditorElement[]> = {}
+    elements.forEach(el => {
+      if (el.groupId) {
+        if (!groups[el.groupId]) {
+          groups[el.groupId] = []
+        }
+        groups[el.groupId].push(el)
+      }
+    })
+    return groups
+  }, [elements])
+
+  // 複数選択のトグル
+  const toggleElementSelection = useCallback((id: string, isMultiSelect: boolean) => {
+    if (isMultiSelect) {
+      setSelectedElements(prev => 
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      )
+    } else {
+      setSelectedElement(id)
+      setSelectedElements([])
+    }
+  }, [])
 
   // 自動スクロール
   useEffect(() => {
@@ -412,6 +498,26 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 </motion.div>
               ))}
 
+              {/* グループ化ボタン */}
+              {selectedElements.length >= 2 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="pt-4 border-t mt-4"
+                >
+                  <Button
+                    variant="default"
+                    className="w-full justify-start gap-3 h-10"
+                    onClick={() => groupElements(selectedElements)}
+                  >
+                    <Layers className="w-4 h-4" />
+                    横並びにグループ化
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {selectedElements.length}個の要素を選択中
+                  </p>
+                </motion.div>
+              )}
 
             </CardContent>
           </Card>
@@ -457,7 +563,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
               {elements.length === 0 ? (
                 <div className={`flex flex-col items-center justify-center h-96 text-muted-foreground rounded-xl transition-colors ${isDraggingElement ? 'bg-primary/5' : ''}`}>
                   <Plus className="w-12 h-12 mb-4" />
-                  <p>{isDraggingElement ? 'ここにドロップして追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
+                  <p>{isDraggingElement ? 'ここにドロップし��追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
                 </div>
               ) : (
                 <Reorder.Group
@@ -482,9 +588,14 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                           className={`group relative p-4 rounded-xl border-2 transition-colors ${
                             selectedElement === element.id
                               ? 'border-primary bg-primary/5'
-                              : 'border-transparent hover:border-border bg-muted/30'
-                          }`}
-                          onClick={() => setSelectedElement(element.id)}
+                              : selectedElements.includes(element.id)
+                                ? 'border-secondary bg-secondary/10'
+                                : 'border-transparent hover:border-border bg-muted/30'
+                          }${element.groupId ? ' flex-1' : ''}`}
+                          style={{
+                            transform: element.style?.rotation ? `rotate(${element.style.rotation}deg)` : undefined
+                          }}
+                          onClick={(e) => toggleElementSelection(element.id, e.shiftKey)}
                         >
                           {/* ドラッグハンドル */}
                           <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab">
@@ -656,26 +767,66 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
               指定した日時に自動的に公開されます。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label className="text-sm">公開日時</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full mt-2">
-                  <Clock className="w-4 h-4 mr-2" />
-                  {scheduledAt
-                    ? format(scheduledAt, 'yyyy年M月d日 HH:mm', { locale: ja })
-                    : '日時を選択'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={scheduledAt}
-                  onSelect={setScheduledAt}
-                  initialFocus
+          <div className="py-4 space-y-4">
+            <div>
+              <Label className="text-sm">公開日</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full mt-2">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    {scheduledAt
+                      ? format(scheduledAt, 'yyyy年M月d日', { locale: ja })
+                      : '日付を選択'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={scheduledAt}
+                    onSelect={(date) => {
+                      if (date) {
+                        const newDate = new Date(date)
+                        if (scheduledAt) {
+                          newDate.setHours(scheduledAt.getHours())
+                          newDate.setMinutes(scheduledAt.getMinutes())
+                        } else {
+                          newDate.setHours(9)
+                          newDate.setMinutes(0)
+                        }
+                        setScheduledAt(newDate)
+                      }
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <Label className="text-sm">公開時刻</Label>
+              <div className="flex items-center gap-2 mt-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="time"
+                  value={scheduledAt ? format(scheduledAt, 'HH:mm') : '09:00'}
+                  onChange={(e) => {
+                    const [hours, minutes] = e.target.value.split(':').map(Number)
+                    const newDate = scheduledAt ? new Date(scheduledAt) : new Date()
+                    newDate.setHours(hours)
+                    newDate.setMinutes(minutes)
+                    setScheduledAt(newDate)
+                  }}
+                  className="flex-1"
                 />
-              </PopoverContent>
-            </Popover>
+              </div>
+            </div>
+            {scheduledAt && (
+              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                <span className="text-muted-foreground">公開予定: </span>
+                <span className="font-medium">
+                  {format(scheduledAt, 'yyyy年M月d日 HH:mm', { locale: ja })}
+                </span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
@@ -690,32 +841,39 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
       </Dialog>
 
       {/* 印刷ダイアログ */}
-      <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>印刷オプション</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="print-answers"
-                checked={printWithAnswers}
-                onCheckedChange={(checked) => setPrintWithAnswers(checked as boolean)}
-              />
-              <Label htmlFor="print-answers">答えを含めて印刷する</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPrintDialog(false)}>
-              キャンセル
-            </Button>
-            <Button onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-2" />
-              印刷
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {existingAssignment && (
+        <PrintDialog
+          assignment={{
+            ...existingAssignment,
+            title: title || existingAssignment.title,
+            description: description || existingAssignment.description,
+            elements,
+            deadline
+          }}
+          open={showPrintDialog}
+          onOpenChange={setShowPrintDialog}
+          printWithAnswers={printWithAnswers}
+          setPrintWithAnswers={setPrintWithAnswers}
+        />
+      )}
+      {!existingAssignment && (
+        <PrintDialog
+          assignment={{
+            id: 'preview',
+            title: title || '無題の課題',
+            description,
+            elements,
+            deadline,
+            status: 'draft',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }}
+          open={showPrintDialog}
+          onOpenChange={setShowPrintDialog}
+          printWithAnswers={printWithAnswers}
+          setPrintWithAnswers={setPrintWithAnswers}
+        />
+      )}
 
       {/* テンプレート保存ダイアログ */}
       <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
@@ -747,6 +905,14 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 解答欄選択ダイアログ */}
+      <AnswerBoxSelector
+        open={showAnswerBoxSelector}
+        onOpenChange={setShowAnswerBoxSelector}
+        usedLabels={usedLabels}
+        onAdd={addAnswerBoxes}
+      />
     </div>
   )
 }
