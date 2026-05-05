@@ -72,6 +72,32 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  if (!assignment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>課題が見つかりません</p>
+      </div>
+    )
+  }
+
+  const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
+  
+  // 答え番号のマッピングを作成
+  const answerIndexMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    answerElements.forEach((el, idx) => {
+      map[el.id] = idx + 1
+    })
+    return map
+  }, [answerElements])
+  
+  const filledCount = answerElements.filter(e => answers[e.id]?.trim()).length
+  const totalCount = answerElements.length
+  const progress = (filledCount / totalCount) * 100
+  const isComplete = filledCount === totalCount
+  const isOverdue = isPast(new Date(assignment.deadline))
+  const isSubmitted = existingSubmission?.status === 'submitted'
+
   // 自動保存機能
   const autoSaveProgress = useCallback(() => {
     if (Object.keys(answers).length > 0 && !isSubmitted) {
@@ -123,32 +149,6 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [autoSaveProgress])
-
-  if (!assignment) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>課題が見つかりません</p>
-      </div>
-    )
-  }
-
-  const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
-  
-  // 答え番号のマッピングを作成
-  const answerIndexMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    answerElements.forEach((el, idx) => {
-      map[el.id] = idx + 1
-    })
-    return map
-  }, [answerElements])
-  
-  const filledCount = answerElements.filter(e => answers[e.id]?.trim()).length
-  const totalCount = answerElements.length
-  const progress = (filledCount / totalCount) * 100
-  const isComplete = filledCount === totalCount
-  const isOverdue = isPast(new Date(assignment.deadline))
-  const isSubmitted = existingSubmission?.status === 'submitted'
 
   const handleAnswerChange = (elementId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [elementId]: value }))
@@ -437,7 +437,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               答えを表示しますか?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              答えを見ながら回答を確認できます。自分で考えてから見ることをおすすめします。
+              答えを見ながら回答を確認できます。自分で考えてから見ることをお��すめします。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
