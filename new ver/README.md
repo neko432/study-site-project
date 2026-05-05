@@ -39,23 +39,9 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Changelog
-
-#### v0.2.0
-- Color scheme update: removed gradients, switched to simple blue and gray base
-- Student info input screen: class (1st/2nd) and name form with animation for special names
-- Deadline time setting: added time input alongside the date picker
-- Katakana marker improvement: removed from add button, now selectable from full ア–ン list in properties panel
-- Delete confirmation dialog: confirmation prompt before deleting assignments
-- StatsCard click navigation: clicking stats cards now navigates to the corresponding tab
-- Answer reveal confirmation dialog: confirmation prompt before showing answers
-
-#### v0.1.0
-- Initial template version (WIP, known bugs)
-
 ### Project Status
 
-This is a work in progress. The repository is used to track progress over time.
+This is the initial template version. Many features are incomplete or buggy. The repository is being used to track progress over time.
 
 ---
 
@@ -93,20 +79,6 @@ pnpm dev
 
 ブラウザで [http://localhost:3000](http://localhost:3000) を開いてください。
 
-### 変更履歴
-
-#### v0.2.0
-- カラースキーム更新: グラデーション廃止、シンプルな青とグレーベースに変更
-- 生徒情報入力画面: クラス（1組/2組）と名前の入力フォーム、特殊名に対応するアニメーション付き
-- 期限の時間設定: 日付ピッカーに加えて時刻入力欄を追加
-- カタカナ記号の改善: 追加ボタンから削除、プロパティパネルで全カタカナ（ア～ン）から選択可能に
-- 削除確認ダイアログ: 課題削除時に確認ダイアログを表示
-- StatsCardのクリック機能: 統計情報をクリックで対応タブへ移動
-- 答え表示確認ダイアログ: 答えを見る前に確認を促す
-
-#### v0.1.0
-- 初期テンプレートバージョン（開発中、既知のバグあり）
-
 ### プロジェクトの状態
 
-開発中です。このリポジトリは進捗を時系列で管理するために使用します。
+これは初期テンプレートバージョンです。多くの機能が未完成またはバグがある状態です。このリポジトリは進捗を時系列で管理するために使用します。
