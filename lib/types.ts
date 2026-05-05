@@ -2,6 +2,8 @@
 
 export type UserRole = 'teacher' | 'student' | null
 
+export type StudentClass = '1' | '2'
+
 // エディター要素の種類
 export type ElementType = 
   | 'text'
@@ -13,6 +15,28 @@ export type ElementType =
   | 'katakana-marker'
   | 'divider'
   | 'question-label'
+  | 'embed'
+
+// 地図のピンデータ
+export interface MapPin {
+  lat: number
+  lng: number
+  label?: string
+}
+
+// 地図データ
+export interface MapData {
+  center: [number, number]
+  zoom: number
+  pins: MapPin[]
+}
+
+// 要素サイズ
+export interface ElementSize {
+  width?: number | 'auto'
+  height?: number | 'auto'
+  scale?: number // 1.0 = 100%
+}
 
 // エディター要素
 export interface EditorElement {
@@ -30,6 +54,20 @@ export interface EditorElement {
   position?: {
     x: number
     y: number
+  }
+  // 新しいプロパティ
+  size?: ElementSize
+  mapData?: MapData
+  embedHtml?: string
+  imageData?: string // base64 encoded image
+  katakanaSymbol?: KatakanaMarker
+  questionNumber?: {
+    format: 'parentheses' | 'dot' | 'mon' | 'bracket'
+    number: number
+  }
+  answerLabel?: {
+    format: 'default' | 'alphabet' | 'number' | 'custom'
+    label: string
   }
 }
 
@@ -50,6 +88,10 @@ export interface Assignment {
   description: string
   elements: EditorElement[]
   deadline: Date
+  deadlineTime?: { // 時間設定追加
+    hour: number
+    minute: number
+  }
   publishedAt?: Date
   scheduledAt?: Date
   status: 'draft' | 'scheduled' | 'published'
@@ -63,6 +105,7 @@ export interface StudentSubmission {
   assignmentId: string
   studentId: string
   studentName: string
+  studentClass: StudentClass
   answers: Record<string, string> // elementId -> answer
   submittedAt: Date
   history: {
@@ -72,7 +115,21 @@ export interface StudentSubmission {
   status: 'in-progress' | 'submitted'
 }
 
-// カタカナマーカーの種類
+// 生徒の進捗（ローカル保存用）
+export interface StudentProgress {
+  assignmentId: string
+  answers: Record<string, string>
+  lastUpdated: Date
+}
+
+// AI採点結果
+export interface GradingResult {
+  isCorrect: boolean
+  confidence: number
+  feedback?: string
+}
+
+// カタカナマーカーの種類（ア〜ン全て）
 export const KATAKANA_MARKERS = [
   'ア', 'イ', 'ウ', 'エ', 'オ',
   'カ', 'キ', 'ク', 'ケ', 'コ',
@@ -87,3 +144,26 @@ export const KATAKANA_MARKERS = [
 ] as const
 
 export type KatakanaMarker = typeof KATAKANA_MARKERS[number]
+
+// Undo/Redo用の履歴状態
+export interface UndoRedoState<T> {
+  past: T[]
+  present: T
+  future: T[]
+}
+
+// 問題番号フォーマット
+export const QUESTION_NUMBER_FORMATS = {
+  parentheses: (n: number) => `(${n})`,
+  dot: (n: number) => `${n}.`,
+  mon: (n: number) => `問${n}`,
+  bracket: (n: number) => `[${n}]`,
+} as const
+
+// 解答欄ラベルフォーマット
+export const ANSWER_LABEL_FORMATS = {
+  default: '答え',
+  alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  number: '123456789',
+  custom: '',
+} as const

@@ -10,21 +10,46 @@ import {
   Calendar,
   FileText,
   ChevronRight,
-  Filter
+  Settings,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'
 import { useAppStore } from '@/lib/store'
 import { AssignmentView } from './assignment-view'
 import { format, isPast, differenceInDays } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import type { StudentClass } from '@/lib/types'
 
 export function StudentDashboard() {
-  const { logout, assignments, submissions, currentStudentId } = useAppStore()
+  const { 
+    logout, 
+    assignments, 
+    submissions, 
+    currentStudentId,
+    studentName,
+    studentClass,
+    setStudentName,
+    setStudentClass
+  } = useAppStore()
+  
   const [selectedAssignment, setSelectedAssignment] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'incomplete' | 'completed'>('all')
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false)
+  const [editName, setEditName] = useState(studentName)
+  const [editClass, setEditClass] = useState<StudentClass>(studentClass)
 
   // 公開中の課題のみ表示
   const publishedAssignments = assignments.filter(a => a.status === 'published')
@@ -53,6 +78,14 @@ export function StudentDashboard() {
     a => getAssignmentStatus(a.id) === 'completed'
   ).length
 
+  const handleSaveSettings = () => {
+    if (editName.trim()) {
+      setStudentName(editName.trim())
+      setStudentClass(editClass)
+      setShowSettingsDialog(false)
+    }
+  }
+
   if (selectedAssignment) {
     return (
       <AssignmentView
@@ -68,7 +101,7 @@ export function StudentDashboard() {
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="sticky top-0 z-40 bg-card/80 backdrop-blur-md border-b"
+        className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b"
       >
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -82,10 +115,22 @@ export function StudentDashboard() {
               {completedCount}/{publishedAssignments.length} 完了
             </Badge>
           </div>
-          <Button variant="ghost" onClick={logout} className="gap-2">
-            <LogOut className="w-4 h-4" />
-            ログアウト
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {studentClass}組 {studentName}
+            </span>
+            <Button variant="ghost" size="icon" onClick={() => {
+              setEditName(studentName)
+              setEditClass(studentClass)
+              setShowSettingsDialog(true)
+            }}>
+              <Settings className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" onClick={logout} className="gap-2">
+              <LogOut className="w-4 h-4" />
+              ログアウト
+            </Button>
+          </div>
         </div>
       </motion.header>
 
@@ -96,7 +141,7 @@ export function StudentDashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <Card className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10">
+          <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -208,6 +253,64 @@ export function StudentDashboard() {
           </AnimatePresence>
         </Tabs>
       </main>
+
+      {/* 設定ダイアログ */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>設定</DialogTitle>
+            <DialogDescription>
+              名前とクラスを変更できます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>クラス</Label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditClass('1')}
+                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all font-medium ${
+                    editClass === '1'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50 text-muted-foreground'
+                  }`}
+                >
+                  1組
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditClass('2')}
+                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all font-medium ${
+                    editClass === '2'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border hover:border-primary/50 text-muted-foreground'
+                  }`}
+                >
+                  2組
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">名前</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="名前を入力"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettingsDialog(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSaveSettings} disabled={!editName.trim()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -274,7 +377,7 @@ function AssignmentCard({
                 status === 'completed'
                   ? 'bg-success/10'
                   : status === 'in-progress'
-                  ? 'bg-secondary/30'
+                  ? 'bg-secondary'
                   : 'bg-muted'
               }`}
             >
@@ -298,7 +401,8 @@ function AssignmentCard({
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
-                  期限: {format(deadline, 'M月d日 HH:mm', { locale: ja })}
+                  期限: {format(deadline, 'M月d日', { locale: ja })}
+                  {assignment.deadlineTime && ` ${assignment.deadlineTime.hour}:${String(assignment.deadlineTime.minute).padStart(2, '0')}`}
                   {!isOverdue && daysLeft <= 3 && daysLeft >= 0 && (
                     <span className="text-destructive font-medium ml-1">
                       (あと{daysLeft === 0 ? '今日まで' : `${daysLeft}日`})

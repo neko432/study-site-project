@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
@@ -11,7 +12,8 @@ import {
   Check,
   Clock,
   RotateCcw,
-  BookOpen
+  BookOpen,
+  ArrowRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,9 +40,16 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/lib/store'
+import { EmbedViewer } from '@/components/editor/embed-editor'
 import { isPast } from 'date-fns'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+
+// Leaflet用のdynamic import
+const MapViewer = dynamic(
+  () => import('@/components/editor/map-editor').then(mod => mod.MapViewer),
+  { ssr: false, loading: () => <div className="h-48 bg-muted animate-pulse rounded-lg" /> }
+)
 
 interface AssignmentViewProps {
   assignmentId: string
@@ -48,25 +57,50 @@ interface AssignmentViewProps {
 }
 
 export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
-  const { assignments, submissions, currentStudentId, addSubmission, updateSubmission } = useAppStore()
+  const { 
+    assignments, 
+    submissions, 
+    currentStudentId, 
+    studentName,
+    studentClass,
+    addSubmission, 
+    updateSubmission,
+    saveProgress,
+    getProgress,
+    clearProgress
+  } = useAppStore()
 
   const assignment = assignments.find(a => a.id === assignmentId)
   const existingSubmission = submissions.find(
     s => s.assignmentId === assignmentId && s.studentId === currentStudentId
   )
 
+  // 進捗から回答を復元
+  const savedAnswers = getProgress(assignmentId)
+  
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     if (existingSubmission) {
       return { ...existingSubmission.answers }
+    }
+    if (savedAnswers) {
+      return { ...savedAnswers }
     }
     return {}
   })
   const [showAnswers, setShowAnswers] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false)
+  const [showAnswerConfirmDialog, setShowAnswerConfirmDialog] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
-  const [viewMode, setViewMode] = useState<'work' | 'review'>('work')
+  const [highlightedAnswerId, setHighlightedAnswerId] = useState<string | null>(null)
+
+  // 進捗を自動保存
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      saveProgress(assignmentId, answers)
+    }
+  }, [answers, assignmentId, saveProgress])
 
   if (!assignment) {
     return (
@@ -79,7 +113,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
   const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
   const filledCount = answerElements.filter(e => answers[e.id]?.trim()).length
   const totalCount = answerElements.length
-  const progress = (filledCount / totalCount) * 100
+  const progress = totalCount > 0 ? (filledCount / totalCount) * 100 : 0
   const isComplete = filledCount === totalCount
   const isOverdue = isPast(new Date(assignment.deadline))
   const isSubmitted = existingSubmission?.status === 'submitted'
@@ -96,10 +130,23 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
     }
   }
 
+  // 答え表示前の確認
+  const handleShowAnswersClick = () => {
+    if (!showAnswers) {
+      setShowAnswerConfirmDialog(true)
+    } else {
+      setShowAnswers(false)
+    }
+  }
+
+  const confirmShowAnswers = () => {
+    setShowAnswers(true)
+    setShowAnswerConfirmDialog(false)
+  }
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
 
-    // シミュレートされた提出処理
     await new Promise(resolve => setTimeout(resolve, 1000))
 
     const submissionData = {
@@ -121,7 +168,8 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
         id: `submission-${Date.now()}`,
         assignmentId,
         studentId: currentStudentId,
-        studentName: '生徒1', // TODO: 実際のユーザー名を使用
+        studentName: studentName || '名前未設定',
+        studentClass: studentClass,
         answers,
         submittedAt: new Date(),
         history: [{ answers, submittedAt: new Date() }],
@@ -129,12 +177,14 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       })
     }
 
+    // 進捗クリア
+    clearProgress(assignmentId)
+
     setIsSubmitting(false)
     setSubmitSuccess(true)
     setShowSubmitDialog(false)
     setShowIncompleteWarning(false)
 
-    // 成功後、少し待ってから戻る
     setTimeout(() => {
       onBack()
     }, 2000)
@@ -146,7 +196,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       <motion.header
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="sticky top-0 z-40 bg-card/80 backdrop-blur-md border-b"
+        className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b"
       >
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -160,7 +210,8 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                 </h1>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="w-4 h-4" />
-                  期限: {format(new Date(assignment.deadline), 'M月d日 HH:mm', { locale: ja })}
+                  期限: {format(new Date(assignment.deadline), 'M月d日', { locale: ja })}
+                  {assignment.deadlineTime && ` ${assignment.deadlineTime.hour}:${String(assignment.deadlineTime.minute).padStart(2, '0')}`}
                   {isOverdue && (
                     <Badge variant="destructive" className="text-xs">期限超過</Badge>
                   )}
@@ -173,7 +224,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
             <div className="flex items-center gap-2">
               <Button
                 variant={showAnswers ? 'default' : 'outline'}
-                onClick={() => setShowAnswers(!showAnswers)}
+                onClick={handleShowAnswersClick}
                 className="gap-2"
               >
                 {showAnswers ? (
@@ -202,9 +253,23 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       </motion.header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 中央配置のコンテナ - 答え表示時にスライド */}
+        <motion.div 
+          className={`flex gap-6 ${showAnswers ? '' : 'justify-center'}`}
+          animate={{ 
+            x: showAnswers ? 0 : 0 
+          }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
+        >
           {/* 問題・回答エリア */}
-          <div className="space-y-4">
+          <motion.div 
+            className="space-y-4"
+            animate={{ 
+              width: showAnswers ? '50%' : '100%',
+              maxWidth: showAnswers ? 'none' : '800px'
+            }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          >
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -212,9 +277,6 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                     <BookOpen className="w-5 h-5" />
                     問題
                   </CardTitle>
-                  {viewMode === 'review' && isSubmitted && (
-                    <Badge variant="outline">確認モード</Badge>
-                  )}
                 </div>
                 {assignment.description && (
                   <p className="text-sm text-muted-foreground">{assignment.description}</p>
@@ -233,6 +295,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                         showAnswer={showAnswers}
                         isSubmitted={isSubmitted && !isOverdue ? false : isSubmitted}
                         isOverdue={isOverdue}
+                        isHighlighted={highlightedAnswerId === element.id}
                       />
                     ))}
                   </div>
@@ -249,7 +312,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               >
                 <Button
                   size="lg"
-                  className="w-full h-14 text-lg gap-3 rounded-2xl shadow-lg"
+                  className="w-full h-14 text-lg gap-3 rounded-xl shadow-lg"
                   onClick={handleSubmitClick}
                   disabled={isSubmitting || submitSuccess}
                 >
@@ -282,58 +345,101 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                 </Button>
               </motion.div>
             )}
-          </div>
+          </motion.div>
 
-          {/* 答え表示エリア (答えを見るモード時) */}
+          {/* 答え表示エリア */}
           <AnimatePresence>
             {showAnswers && (
               <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 50 }}
+                initial={{ opacity: 0, x: 50, width: 0 }}
+                animate={{ opacity: 1, x: 0, width: '50%' }}
+                exit={{ opacity: 0, x: 50, width: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="shrink-0"
               >
-                <Card className="border-answer/30 bg-answer/5">
+                <Card className="border-answer/30 bg-answer/5 sticky top-24">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-answer">
                       <Eye className="w-5 h-5" />
                       答え
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      答えを参考にしながら入力できます
+                      答えにカーソルを合わせると、対応する解答欄がハイライトされます
                     </p>
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[600px] pr-4">
                       <div className="space-y-4 no-select" style={{ userSelect: 'none' }}>
-                        {answerElements.map((element, index) => (
-                          <motion.div
-                            key={element.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            className="p-4 rounded-xl bg-card border"
-                          >
-                            <div className="flex items-start gap-3">
-                              <Badge variant="outline" className="shrink-0">
-                                {element.content}
-                              </Badge>
-                              <div className="flex-1">
-                                <p 
-                                  className="text-answer font-medium text-lg"
-                                  onCopy={(e) => e.preventDefault()}
-                                  onCut={(e) => e.preventDefault()}
+                        {answerElements.map((element, index) => {
+                          const userAnswer = answers[element.id]?.trim() || ''
+                          const correctAnswer = element.answer?.trim() || ''
+                          const isCorrect = userAnswer === correctAnswer
+                          const hasAnswered = userAnswer.length > 0
+                          
+                          return (
+                            <motion.div
+                              key={element.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.05 }}
+                              className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                                highlightedAnswerId === element.id
+                                  ? 'bg-primary/10 border-primary'
+                                  : 'bg-card'
+                              }`}
+                              onMouseEnter={() => setHighlightedAnswerId(element.id)}
+                              onMouseLeave={() => setHighlightedAnswerId(null)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <Badge 
+                                  variant="outline" 
+                                  className={`shrink-0 ${
+                                    highlightedAnswerId === element.id 
+                                      ? 'bg-primary text-primary-foreground' 
+                                      : ''
+                                  }`}
                                 >
-                                  {element.answer}
-                                </p>
-                                {element.importantPoint && (
-                                  <p className="text-sm text-muted-foreground mt-2 p-2 rounded-lg bg-muted/50">
-                                    重要: {element.importantPoint}
-                                  </p>
-                                )}
+                                  {element.content}
+                                </Badge>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p 
+                                      className="text-answer font-medium text-lg"
+                                      onCopy={(e) => e.preventDefault()}
+                                      onCut={(e) => e.preventDefault()}
+                                    >
+                                      {element.answer}
+                                    </p>
+                                    {hasAnswered && (
+                                      <Badge 
+                                        variant={isCorrect ? 'default' : 'destructive'}
+                                        className={isCorrect ? 'bg-success' : ''}
+                                      >
+                                        {isCorrect ? '正解' : '不正解'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {hasAnswered && !isCorrect && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      あなたの回答: <span className="text-destructive">{userAnswer}</span>
+                                    </p>
+                                  )}
+                                  {element.importantPoint && (
+                                    <p className="text-sm text-muted-foreground mt-2 p-2 rounded-lg bg-muted/50">
+                                      重要: {element.importantPoint}
+                                    </p>
+                                  )}
+                                </div>
+                                {/* 矢印アイコンで対応を示す */}
+                                <ArrowRight className={`w-5 h-5 shrink-0 transition-colors ${
+                                  highlightedAnswerId === element.id
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground'
+                                }`} />
                               </div>
-                            </div>
-                          </motion.div>
-                        ))}
+                            </motion.div>
+                          )
+                        })}
                       </div>
                     </ScrollArea>
                   </CardContent>
@@ -341,8 +447,27 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
       </main>
+
+      {/* 答え表示確認ダイアログ */}
+      <AlertDialog open={showAnswerConfirmDialog} onOpenChange={setShowAnswerConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>答えを表示しますか?</AlertDialogTitle>
+            <AlertDialogDescription>
+              答えを見ると、自分で考える機会が減ってしまいます。
+              まずは自分で解いてみることをおすすめします。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>もう少し考える</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmShowAnswers}>
+              答えを見る
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 提出確認ダイアログ */}
       <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
@@ -436,7 +561,8 @@ function ElementDisplay({
   onAnswerChange,
   showAnswer,
   isSubmitted,
-  isOverdue
+  isOverdue,
+  isHighlighted
 }: {
   element: NonNullable<ReturnType<typeof useAppStore>['assignments'][0]>['elements'][0]
   index: number
@@ -445,6 +571,7 @@ function ElementDisplay({
   showAnswer: boolean
   isSubmitted: boolean
   isOverdue: boolean
+  isHighlighted: boolean
 }) {
   const canEdit = !isSubmitted || !isOverdue
 
@@ -456,6 +583,7 @@ function ElementDisplay({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
           className="text-2xl font-bold text-foreground"
+          style={element.size?.scale ? { fontSize: `${element.size.scale * 1.5}rem` } : {}}
         >
           {element.content}
         </motion.h2>
@@ -494,9 +622,16 @@ function ElementDisplay({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
-          className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border"
+          className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+            isHighlighted
+              ? 'bg-primary/10 border-primary ring-2 ring-primary/50'
+              : 'bg-muted/30'
+          }`}
         >
-          <Badge variant="outline" className="shrink-0 bg-card">
+          <Badge 
+            variant="outline" 
+            className={`shrink-0 ${isHighlighted ? 'bg-primary text-primary-foreground' : 'bg-card'}`}
+          >
             {element.content}
           </Badge>
           <div className="flex-1 relative">
@@ -510,7 +645,7 @@ function ElementDisplay({
                     ? 'border-success bg-success/10'
                     : 'border-destructive bg-destructive/10'
                   : ''
-              }`}
+              } ${isHighlighted ? 'border-primary' : ''}`}
               disabled={!canEdit}
             />
             {showAnswer && hasAnswer && (
@@ -554,9 +689,19 @@ function ElementDisplay({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
-          className="flex items-center justify-center h-48 bg-muted rounded-xl"
         >
-          <p className="text-muted-foreground">画像</p>
+          {element.imageData ? (
+            <img
+              src={element.imageData}
+              alt={element.content}
+              className="max-w-full h-auto rounded-xl"
+              style={{ maxHeight: '300px' }}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-48 bg-muted rounded-xl">
+              <p className="text-muted-foreground">画像</p>
+            </div>
+          )}
         </motion.div>
       )
 
@@ -566,9 +711,32 @@ function ElementDisplay({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.03 }}
-          className="flex items-center justify-center h-64 bg-muted rounded-xl"
         >
-          <p className="text-muted-foreground">地図</p>
+          {element.mapData ? (
+            <div className="h-64 rounded-xl overflow-hidden">
+              <MapViewer data={element.mapData} className="h-full" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-64 bg-muted rounded-xl">
+              <p className="text-muted-foreground">地図</p>
+            </div>
+          )}
+        </motion.div>
+      )
+
+    case 'embed':
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.03 }}
+          className="p-4 bg-muted/50 rounded-xl"
+        >
+          {element.embedHtml ? (
+            <EmbedViewer html={element.embedHtml} />
+          ) : (
+            <p className="text-muted-foreground text-center">埋め込みコンテンツ</p>
+          )}
         </motion.div>
       )
 

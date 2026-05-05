@@ -4,101 +4,101 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* ポップでカラフルな学習サイト用テーマ */
-  --background: oklch(0.98 0.01 280);
-  --foreground: oklch(0.2 0.02 280);
+  /* Naniサイト参考のシンプルで落ち着いたテーマ */
+  --background: oklch(0.99 0.002 250);
+  --foreground: oklch(0.13 0.02 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 280);
+  --card-foreground: oklch(0.13 0.02 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 280);
+  --popover-foreground: oklch(0.13 0.02 250);
   
-  /* プライマリ: 明るいピンク/マゼンタ */
-  --primary: oklch(0.65 0.25 330);
+  /* プライマリ: 落ち着いた青 */
+  --primary: oklch(0.50 0.14 250);
   --primary-foreground: oklch(1 0 0);
   
-  /* セカンダリ: 明るいシアン/ターコイズ */
-  --secondary: oklch(0.85 0.12 195);
-  --secondary-foreground: oklch(0.25 0.05 195);
+  /* セカンダリ: 薄いグレー */
+  --secondary: oklch(0.96 0.005 250);
+  --secondary-foreground: oklch(0.25 0.02 250);
   
-  /* ミュート: 柔らかいラベンダー */
-  --muted: oklch(0.95 0.02 280);
-  --muted-foreground: oklch(0.45 0.03 280);
+  /* ミュート: ニュートラルグレー */
+  --muted: oklch(0.96 0.003 250);
+  --muted-foreground: oklch(0.45 0.02 250);
   
-  /* アクセント: 明るいオレンジ/コーラル */
-  --accent: oklch(0.8 0.15 55);
-  --accent-foreground: oklch(0.25 0.05 55);
+  /* アクセント: 薄い青 */
+  --accent: oklch(0.95 0.02 250);
+  --accent-foreground: oklch(0.25 0.02 250);
   
-  --destructive: oklch(0.6 0.22 25);
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(1 0 0);
   
   /* サクセス: グリーン */
-  --success: oklch(0.7 0.18 145);
+  --success: oklch(0.60 0.16 145);
   --success-foreground: oklch(1 0 0);
   
   /* 答え用の赤色 */
-  --answer: oklch(0.55 0.25 25);
+  --answer: oklch(0.55 0.22 25);
   --answer-foreground: oklch(1 0 0);
   
-  --border: oklch(0.9 0.02 280);
-  --input: oklch(0.95 0.01 280);
-  --ring: oklch(0.65 0.25 330);
+  --border: oklch(0.92 0.005 250);
+  --input: oklch(0.96 0.003 250);
+  --ring: oklch(0.50 0.14 250);
   
-  /* チャート用のポップなカラー */
-  --chart-1: oklch(0.65 0.25 330);
-  --chart-2: oklch(0.75 0.18 195);
-  --chart-3: oklch(0.8 0.15 55);
-  --chart-4: oklch(0.7 0.18 145);
-  --chart-5: oklch(0.7 0.2 280);
+  /* チャート用カラー */
+  --chart-1: oklch(0.50 0.14 250);
+  --chart-2: oklch(0.60 0.12 200);
+  --chart-3: oklch(0.65 0.10 160);
+  --chart-4: oklch(0.55 0.12 280);
+  --chart-5: oklch(0.60 0.08 220);
   
-  --radius: 1rem;
+  --radius: 0.75rem;
   
-  --sidebar: oklch(0.98 0.01 280);
-  --sidebar-foreground: oklch(0.2 0.02 280);
-  --sidebar-primary: oklch(0.65 0.25 330);
+  --sidebar: oklch(0.99 0.002 250);
+  --sidebar-foreground: oklch(0.13 0.02 250);
+  --sidebar-primary: oklch(0.50 0.14 250);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.95 0.02 280);
-  --sidebar-accent-foreground: oklch(0.2 0.02 280);
-  --sidebar-border: oklch(0.9 0.02 280);
-  --sidebar-ring: oklch(0.65 0.25 330);
+  --sidebar-accent: oklch(0.96 0.005 250);
+  --sidebar-accent-foreground: oklch(0.25 0.02 250);
+  --sidebar-border: oklch(0.92 0.005 250);
+  --sidebar-ring: oklch(0.50 0.14 250);
 }
 
 .dark {
-  --background: oklch(0.15 0.02 280);
-  --foreground: oklch(0.95 0.01 280);
-  --card: oklch(0.2 0.02 280);
-  --card-foreground: oklch(0.95 0.01 280);
-  --popover: oklch(0.2 0.02 280);
-  --popover-foreground: oklch(0.95 0.01 280);
-  --primary: oklch(0.7 0.22 330);
-  --primary-foreground: oklch(0.15 0.02 280);
-  --secondary: oklch(0.35 0.08 195);
-  --secondary-foreground: oklch(0.95 0.01 280);
-  --muted: oklch(0.25 0.02 280);
-  --muted-foreground: oklch(0.7 0.02 280);
-  --accent: oklch(0.4 0.1 55);
-  --accent-foreground: oklch(0.95 0.01 280);
-  --destructive: oklch(0.5 0.2 25);
-  --destructive-foreground: oklch(0.95 0.01 280);
-  --success: oklch(0.55 0.15 145);
-  --success-foreground: oklch(0.95 0.01 280);
-  --answer: oklch(0.65 0.22 25);
-  --answer-foreground: oklch(0.95 0.01 280);
-  --border: oklch(0.3 0.02 280);
-  --input: oklch(0.25 0.02 280);
-  --ring: oklch(0.7 0.22 330);
-  --chart-1: oklch(0.7 0.22 330);
-  --chart-2: oklch(0.65 0.15 195);
-  --chart-3: oklch(0.7 0.12 55);
-  --chart-4: oklch(0.6 0.15 145);
-  --chart-5: oklch(0.65 0.18 280);
-  --sidebar: oklch(0.18 0.02 280);
-  --sidebar-foreground: oklch(0.95 0.01 280);
-  --sidebar-primary: oklch(0.7 0.22 330);
-  --sidebar-primary-foreground: oklch(0.15 0.02 280);
-  --sidebar-accent: oklch(0.25 0.02 280);
-  --sidebar-accent-foreground: oklch(0.95 0.01 280);
-  --sidebar-border: oklch(0.3 0.02 280);
-  --sidebar-ring: oklch(0.7 0.22 330);
+  --background: oklch(0.14 0.015 250);
+  --foreground: oklch(0.95 0.005 250);
+  --card: oklch(0.18 0.015 250);
+  --card-foreground: oklch(0.95 0.005 250);
+  --popover: oklch(0.18 0.015 250);
+  --popover-foreground: oklch(0.95 0.005 250);
+  --primary: oklch(0.60 0.14 250);
+  --primary-foreground: oklch(0.13 0.02 250);
+  --secondary: oklch(0.25 0.015 250);
+  --secondary-foreground: oklch(0.95 0.005 250);
+  --muted: oklch(0.22 0.015 250);
+  --muted-foreground: oklch(0.65 0.01 250);
+  --accent: oklch(0.28 0.02 250);
+  --accent-foreground: oklch(0.95 0.005 250);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.95 0.005 250);
+  --success: oklch(0.55 0.14 145);
+  --success-foreground: oklch(0.95 0.005 250);
+  --answer: oklch(0.60 0.2 25);
+  --answer-foreground: oklch(0.95 0.005 250);
+  --border: oklch(0.28 0.015 250);
+  --input: oklch(0.22 0.015 250);
+  --ring: oklch(0.60 0.14 250);
+  --chart-1: oklch(0.60 0.14 250);
+  --chart-2: oklch(0.55 0.12 200);
+  --chart-3: oklch(0.60 0.10 160);
+  --chart-4: oklch(0.50 0.12 280);
+  --chart-5: oklch(0.55 0.08 220);
+  --sidebar: oklch(0.16 0.015 250);
+  --sidebar-foreground: oklch(0.95 0.005 250);
+  --sidebar-primary: oklch(0.60 0.14 250);
+  --sidebar-primary-foreground: oklch(0.13 0.02 250);
+  --sidebar-accent: oklch(0.22 0.015 250);
+  --sidebar-accent-foreground: oklch(0.95 0.005 250);
+  --sidebar-border: oklch(0.28 0.015 250);
+  --sidebar-ring: oklch(0.60 0.14 250);
 }
 
 @theme inline {
@@ -184,6 +184,21 @@
     -moz-user-select: none;
     -ms-user-select: none;
   }
+
+  /* 特殊名前アニメーション */
+  .special-name-animation {
+    animation: specialNameGlow 1.5s ease-in-out forwards;
+  }
+
+  .special-name-wave {
+    display: inline-block;
+    animation: nameWave 0.8s ease-in-out forwards;
+  }
+
+  .special-name-bounce {
+    display: inline-block;
+    animation: nameBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+  }
 }
 
 @keyframes bounceIn {
@@ -244,4 +259,61 @@
   50% {
     opacity: 0.7;
   }
+}
+
+@keyframes specialNameGlow {
+  0% {
+    text-shadow: 0 0 0 transparent;
+    transform: scale(1);
+  }
+  50% {
+    text-shadow: 0 0 20px oklch(0.60 0.14 250 / 0.8), 0 0 40px oklch(0.60 0.14 250 / 0.4);
+    transform: scale(1.15);
+  }
+  100% {
+    text-shadow: 0 0 0 transparent;
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes nameWave {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-8px) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-4px) rotate(5deg);
+  }
+}
+
+@keyframes nameBounce {
+  0% {
+    transform: scale(1) translateY(0);
+  }
+  30% {
+    transform: scale(1.2) translateY(-10px);
+  }
+  50% {
+    transform: scale(0.9) translateY(0);
+  }
+  70% {
+    transform: scale(1.1) translateY(-5px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Leaflet map styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  border-radius: var(--radius);
 }

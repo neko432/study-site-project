@@ -7,8 +7,16 @@ import type {
   Assignment, 
   AssignmentTemplate, 
   StudentSubmission, 
-  EditorElement 
+  EditorElement,
+  StudentClass
 } from './types'
+
+// Undo/Redo用の履歴管理
+interface EditorHistory {
+  past: EditorElement[][]
+  present: EditorElement[]
+  future: EditorElement[][]
+}
 
 interface AppState {
   // 認証関連
@@ -16,20 +24,34 @@ interface AppState {
   isAuthenticated: boolean
   keepLoggedIn: boolean
   
+  // 生徒情報
+  studentName: string
+  studentClass: StudentClass
+  
   // 先生用
   assignments: Assignment[]
   templates: AssignmentTemplate[]
   currentEditor: EditorElement[]
   
+  // Undo/Redo用履歴
+  editorHistory: EditorHistory
+  
   // 生徒用
   submissions: StudentSubmission[]
   currentStudentId: string
+  
+  // 進捗保存
+  savedProgress: Record<string, Record<string, string>> // assignmentId -> answers
   
   // アクション
   setRole: (role: UserRole) => void
   setAuthenticated: (auth: boolean) => void
   setKeepLoggedIn: (keep: boolean) => void
   logout: () => void
+  
+  // 生徒情報
+  setStudentName: (name: string) => void
+  setStudentClass: (cls: StudentClass) => void
   
   // 課題管理
   addAssignment: (assignment: Assignment) => void
@@ -40,11 +62,23 @@ interface AppState {
   addTemplate: (template: AssignmentTemplate) => void
   deleteTemplate: (id: string) => void
   
-  // エディター
+  // エディター（Undo/Redo対応）
   setCurrentEditor: (elements: EditorElement[]) => void
   addElement: (element: EditorElement) => void
   updateElement: (id: string, element: Partial<EditorElement>) => void
   deleteElement: (id: string) => void
+  reorderElements: (elements: EditorElement[]) => void
+  
+  // Undo/Redo
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
+  
+  // 進捗保存
+  saveProgress: (assignmentId: string, answers: Record<string, string>) => void
+  getProgress: (assignmentId: string) => Record<string, string> | null
+  clearProgress: (assignmentId: string) => void
   
   // 提出管理
   addSubmission: (submission: StudentSubmission) => void
@@ -148,6 +182,7 @@ const sampleAssignments: Assignment[] = [
       }
     ],
     deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    deadlineTime: { hour: 23, minute: 59 },
     publishedAt: new Date(),
     status: 'published',
     createdAt: new Date(),
@@ -155,24 +190,38 @@ const sampleAssignments: Assignment[] = [
   }
 ]
 
+const initialEditorHistory: EditorHistory = {
+  past: [],
+  present: [],
+  future: []
+}
+
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // 初期状態
       role: null,
       isAuthenticated: false,
       keepLoggedIn: false,
+      studentName: '',
+      studentClass: '1',
       assignments: sampleAssignments,
       templates: [],
       currentEditor: [],
+      editorHistory: initialEditorHistory,
       submissions: [],
       currentStudentId: 'student-1',
+      savedProgress: {},
       
       // 認証アクション
       setRole: (role) => set({ role }),
       setAuthenticated: (auth) => set({ isAuthenticated: auth }),
       setKeepLoggedIn: (keep) => set({ keepLoggedIn: keep }),
       logout: () => set({ role: null, isAuthenticated: false }),
+      
+      // 生徒情報
+      setStudentName: (name) => set({ studentName: name }),
+      setStudentClass: (cls) => set({ studentClass: cls }),
       
       // 課題管理
       addAssignment: (assignment) => 
@@ -196,22 +245,115 @@ export const useAppStore = create<AppState>()(
           templates: state.templates.filter((t) => t.id !== id)
         })),
       
-      // エディター
-      setCurrentEditor: (elements) => set({ currentEditor: elements }),
+      // エディター（履歴付き）
+      setCurrentEditor: (elements) => set({ 
+        currentEditor: elements,
+        editorHistory: {
+          past: [],
+          present: elements,
+          future: []
+        }
+      }),
+      
       addElement: (element) =>
-        set((state) => ({
-          currentEditor: [...state.currentEditor, element]
-        })),
+        set((state) => {
+          const newElements = [...state.currentEditor, element]
+          return {
+            currentEditor: newElements,
+            editorHistory: {
+              past: [...state.editorHistory.past, state.editorHistory.present],
+              present: newElements,
+              future: []
+            }
+          }
+        }),
+        
       updateElement: (id, updates) =>
-        set((state) => ({
-          currentEditor: state.currentEditor.map((e) =>
+        set((state) => {
+          const newElements = state.currentEditor.map((e) =>
             e.id === id ? { ...e, ...updates } : e
           )
-        })),
+          return {
+            currentEditor: newElements,
+            editorHistory: {
+              past: [...state.editorHistory.past, state.editorHistory.present],
+              present: newElements,
+              future: []
+            }
+          }
+        }),
+        
       deleteElement: (id) =>
+        set((state) => {
+          const newElements = state.currentEditor.filter((e) => e.id !== id)
+          return {
+            currentEditor: newElements,
+            editorHistory: {
+              past: [...state.editorHistory.past, state.editorHistory.present],
+              present: newElements,
+              future: []
+            }
+          }
+        }),
+        
+      reorderElements: (elements) =>
         set((state) => ({
-          currentEditor: state.currentEditor.filter((e) => e.id !== id)
+          currentEditor: elements,
+          editorHistory: {
+            past: [...state.editorHistory.past, state.editorHistory.present],
+            present: elements,
+            future: []
+          }
         })),
+      
+      // Undo/Redo
+      undo: () => set((state) => {
+        if (state.editorHistory.past.length === 0) return state
+        const previous = state.editorHistory.past[state.editorHistory.past.length - 1]
+        const newPast = state.editorHistory.past.slice(0, -1)
+        return {
+          currentEditor: previous,
+          editorHistory: {
+            past: newPast,
+            present: previous,
+            future: [state.editorHistory.present, ...state.editorHistory.future]
+          }
+        }
+      }),
+      
+      redo: () => set((state) => {
+        if (state.editorHistory.future.length === 0) return state
+        const next = state.editorHistory.future[0]
+        const newFuture = state.editorHistory.future.slice(1)
+        return {
+          currentEditor: next,
+          editorHistory: {
+            past: [...state.editorHistory.past, state.editorHistory.present],
+            present: next,
+            future: newFuture
+          }
+        }
+      }),
+      
+      canUndo: () => get().editorHistory.past.length > 0,
+      canRedo: () => get().editorHistory.future.length > 0,
+      
+      // 進捗保存
+      saveProgress: (assignmentId, answers) =>
+        set((state) => ({
+          savedProgress: {
+            ...state.savedProgress,
+            [assignmentId]: answers
+          }
+        })),
+        
+      getProgress: (assignmentId) => get().savedProgress[assignmentId] || null,
+      
+      clearProgress: (assignmentId) =>
+        set((state) => {
+          const { [assignmentId]: _, ...rest } = state.savedProgress
+          return { savedProgress: rest }
+        }),
       
       // 提出管理
       addSubmission: (submission) =>
@@ -231,14 +373,20 @@ export const useAppStore = create<AppState>()(
               role: state.role, 
               isAuthenticated: state.isAuthenticated,
               keepLoggedIn: state.keepLoggedIn,
+              studentName: state.studentName,
+              studentClass: state.studentClass,
               assignments: state.assignments,
               templates: state.templates,
-              submissions: state.submissions
+              submissions: state.submissions,
+              savedProgress: state.savedProgress
             }
           : {
+              studentName: state.studentName,
+              studentClass: state.studentClass,
               assignments: state.assignments,
               templates: state.templates,
-              submissions: state.submissions
+              submissions: state.submissions,
+              savedProgress: state.savedProgress
             }
     }
   )
