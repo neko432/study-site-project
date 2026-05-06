@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, User, Clock, History, Check, X, Eye } from 'lucide-react'
+import { ArrowLeft, User, Clock, History, Check, X, Eye, Users, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,9 +15,13 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/lib/store'
-import type { Assignment, Submission } from '@/lib/types'
+import type { Assignment, StudentSubmission } from '@/lib/types'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+
+// クラスフィルターの定数
+const CLASS_OPTIONS = ['all', '1組', '2組'] as const
+type ClassFilter = typeof CLASS_OPTIONS[number]
 
 interface SubmissionViewerProps {
   assignmentId: string
@@ -25,12 +29,52 @@ interface SubmissionViewerProps {
 }
 
 export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps) {
-  const { assignments, submissions } = useAppStore() as { assignments: Assignment[]; submissions: Submission[] }
+  const { assignments, submissions } = useAppStore() as { assignments: Assignment[]; submissions: StudentSubmission[] }
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [classFilter, setClassFilter] = useState<ClassFilter>('all')
 
   const assignment = assignments.find(a => a.id === assignmentId)
   const assignmentSubmissions = submissions.filter(s => s.assignmentId === assignmentId)
+  
+  // クラスでフィルタリングした提出
+  const filteredSubmissions = useMemo(() => {
+    if (classFilter === 'all') return assignmentSubmissions
+    return assignmentSubmissions.filter(s => s.studentClass === classFilter)
+  }, [assignmentSubmissions, classFilter])
+  
+  // クラス別の統計
+  const classStats = useMemo(() => {
+    const stats = {
+      '1組': { count: 0, correctRate: 0 },
+      '2組': { count: 0, correctRate: 0 }
+    }
+    
+    if (!assignment) return stats
+    
+    const answerElements = assignment.elements.filter(e => e.type === 'answer-box')
+    
+    assignmentSubmissions.forEach(sub => {
+      const className = sub.studentClass as '1組' | '2組'
+      if (stats[className]) {
+        stats[className].count++
+        const correctCount = answerElements.filter(
+          e => (sub.answers[e.id] || '').trim() === (e.answer || '').trim()
+        ).length
+        stats[className].correctRate += (correctCount / answerElements.length) * 100
+      }
+    })
+    
+    // 平均正答率を計算
+    if (stats['1組'].count > 0) {
+      stats['1組'].correctRate = Math.round(stats['1組'].correctRate / stats['1組'].count)
+    }
+    if (stats['2組'].count > 0) {
+      stats['2組'].correctRate = Math.round(stats['2組'].correctRate / stats['2組'].count)
+    }
+    
+    return stats
+  }, [assignment, assignmentSubmissions])
 
   if (!assignment) {
     return (
@@ -66,21 +110,89 @@ export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps
       </motion.header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* クラス別統計 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">全体</p>
+                  <p className="text-2xl font-bold">{assignmentSubmissions.length}件</p>
+                </div>
+                <Users className="w-8 h-8 text-primary/50" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`${classFilter === '1組' ? 'ring-2 ring-primary' : ''}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">1組</p>
+                  <p className="text-2xl font-bold">{classStats['1組'].count}件</p>
+                  {classStats['1組'].count > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      平均正答率: {classStats['1組'].correctRate}%
+                    </p>
+                  )}
+                </div>
+                <Button 
+                  variant={classFilter === '1組' ? 'default' : 'outline'} 
+                  size="sm"
+                  onClick={() => setClassFilter(classFilter === '1組' ? 'all' : '1組')}
+                >
+                  <Filter className="w-3 h-3 mr-1" />
+                  絞り込み
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`${classFilter === '2組' ? 'ring-2 ring-primary' : ''}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">2組</p>
+                  <p className="text-2xl font-bold">{classStats['2組'].count}件</p>
+                  {classStats['2組'].count > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      平均正答率: {classStats['2組'].correctRate}%
+                    </p>
+                  )}
+                </div>
+                <Button 
+                  variant={classFilter === '2組' ? 'default' : 'outline'} 
+                  size="sm"
+                  onClick={() => setClassFilter(classFilter === '2組' ? 'all' : '2組')}
+                >
+                  <Filter className="w-3 h-3 mr-1" />
+                  絞り込み
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 提出一覧 */}
           <div className="lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  提出者一覧
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    提出者一覧
+                  </span>
+                  {classFilter !== 'all' && (
+                    <Badge variant="secondary" className="font-normal">
+                      {classFilter}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-2">
-                    {assignmentSubmissions.length > 0 ? (
-                      assignmentSubmissions.map((submission, index) => (
+                    {filteredSubmissions.length > 0 ? (
+                      filteredSubmissions.map((submission, index) => (
                         <motion.button
                           key={submission.id}
                           initial={{ opacity: 0, x: -20 }}
@@ -98,10 +210,15 @@ export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps
                               <p className="font-medium text-foreground">
                                 {submission.studentName}
                               </p>
-                              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {format(new Date(submission.submittedAt), 'M月d日 HH:mm', { locale: ja })}
-                              </p>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                                  {submission.studentClass}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {format(new Date(submission.submittedAt), 'M月d日 HH:mm', { locale: ja })}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               {submission.history.length > 1 && (
@@ -121,7 +238,22 @@ export function SubmissionViewer({ assignmentId, onBack }: SubmissionViewerProps
                     ) : (
                       <div className="text-center py-12 text-muted-foreground">
                         <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>まだ提出がありません</p>
+                        <p>
+                          {classFilter !== 'all' 
+                            ? `${classFilter}の提出がありません` 
+                            : 'まだ提出がありません'
+                          }
+                        </p>
+                        {classFilter !== 'all' && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => setClassFilter('all')}
+                          >
+                            全体を表示
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

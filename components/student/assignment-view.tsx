@@ -280,9 +280,23 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
       </motion.header>
 
       <main className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div 
+          className="flex gap-6"
+          layout
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        >
           {/* 問題・回答エリア */}
-          <div className="space-y-4">
+          <motion.div 
+            className="space-y-4"
+            layout
+            animate={{
+              width: showAnswers ? '50%' : '100%',
+              maxWidth: showAnswers ? '50%' : '800px',
+              marginLeft: showAnswers ? '0' : 'auto',
+              marginRight: showAnswers ? '0' : 'auto'
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -361,17 +375,19 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
                 </Button>
               </motion.div>
             )}
-          </div>
+          </motion.div>
 
           {/* 答え表示エリア (答えを見るモード時) */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {showAnswers && (
               <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 50 }}
+                className="w-1/2 shrink-0"
+                initial={{ opacity: 0, x: 100, width: 0 }}
+                animate={{ opacity: 1, x: 0, width: '50%' }}
+                exit={{ opacity: 0, x: 100, width: 0 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               >
-                <Card className="border-answer/30 bg-answer/5">
+                <Card className="border-answer/30 bg-answer/5 sticky top-24">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-answer">
                       <Eye className="w-5 h-5" />
@@ -425,7 +441,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </motion.div>
       </main>
 
       {/* 答え表示確認ダイアログ */}
@@ -437,7 +453,7 @@ export function AssignmentView({ assignmentId, onBack }: AssignmentViewProps) {
               答えを表示しますか?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              答えを見ながら回答を確認できます。自分で考えてから見ることをお���すめします。
+              答えを見ながら回答を確認できます。自分で考えてから見ることをお����すめします。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

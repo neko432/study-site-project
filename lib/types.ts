@@ -15,6 +15,19 @@ export type ElementType =
   | 'question-label'
   | 'embed'
 
+// AI判定の種類
+export type AnswerJudgmentType = 'exact' | 'flexible' | 'ai'
+
+// AI判定設定
+export interface AIJudgmentConfig {
+  type: AnswerJudgmentType
+  acceptableSimilarity?: number // 0-100
+  keywords?: string[]
+}
+
+// レイアウトモード
+export type LayoutMode = 'linear' | 'freeform'
+
 // エディター要素
 export interface EditorElement {
   id: string
@@ -25,6 +38,8 @@ export interface EditorElement {
   imageUrl?: string
   mapPins?: { lat: number; lng: number; label?: string }[]
   embedHtml?: string
+  judgmentConfig?: AIJudgmentConfig
+  groupId?: string // 所属するグループのID
   style?: {
     fontSize?: string
     fontWeight?: string
@@ -32,11 +47,22 @@ export interface EditorElement {
     textAlign?: 'left' | 'center' | 'right'
     width?: number
     height?: number
+    rotation?: number
+    scaleX?: number
+    scaleY?: number
   }
   position?: {
     x: number
     y: number
   }
+}
+
+// 要素グループ（横並び配置用）
+export interface ElementGroup {
+  id: string
+  elementIds: string[]
+  layout: 'row' | 'column'
+  gap?: number
 }
 
 // 課題テンプレート
@@ -55,6 +81,8 @@ export interface Assignment {
   title: string
   description: string
   elements: EditorElement[]
+  elementGroups?: ElementGroup[]
+  layoutMode?: LayoutMode
   deadline: Date
   publishedAt?: Date
   scheduledAt?: Date
@@ -69,6 +97,7 @@ export interface StudentSubmission {
   assignmentId: string
   studentId: string
   studentName: string
+  studentClass: string
   answers: Record<string, string> // elementId -> answer
   submittedAt: Date
   history: {

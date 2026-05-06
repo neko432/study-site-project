@@ -25,7 +25,10 @@ import {
   Code,
   Undo2,
   Redo2,
-  MapPin
+  MapPin,
+  Layout,
+  LayoutGrid,
+  Move
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,7 +60,8 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Slider } from '@/components/ui/slider'
 import { useAppStore } from '@/lib/store'
-import { KATAKANA_MARKERS, type EditorElement, type ElementType } from '@/lib/types'
+import { KATAKANA_MARKERS, type EditorElement, type ElementType, type LayoutMode } from '@/lib/types'
+import { ElementTransformControls, ElementResizeWidth } from '@/components/teacher/element-transform-controls'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -102,7 +106,11 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
   const [katakanaIndex, setKatakanaIndex] = useState(0)
   const [printWithAnswers, setPrintWithAnswers] = useState(true)
+  const [printWithImportantPoints, setPrintWithImportantPoints] = useState(false)
   const [templateName, setTemplateName] = useState('')
+  const [showAnswerLabelDialog, setShowAnswerLabelDialog] = useState(false)
+  const [pendingAnswerBoxType, setPendingAnswerBoxType] = useState<'katakana' | 'number' | 'custom'>('katakana')
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(existingAssignment?.layoutMode || 'linear')
   
   // Undo/Redo 履歴
   const [history, setHistory] = useState<EditorElement[][]>([existingAssignment?.elements || []])
@@ -146,12 +154,57 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   const canUndo = historyIndex > 0
   const canRedo = historyIndex < history.length - 1
 
+  // 使用済みのラベルを取得
+  const usedLabels = elements
+    .filter(e => e.type === 'answer-box')
+    .map(e => e.content)
+    
+  // 次に使用可能なカタカナラベル
+  const nextKatakanaLabel = KATAKANA_MARKERS.find(k => !usedLabels.includes(k)) || KATAKANA_MARKERS[0]
+  
+  // 次に使用可能な問題番号（Q1, Q2, ...）
+  const getNextNumberLabel = () => {
+    let num = 1
+    while (usedLabels.includes(`Q${num}`)) {
+      num++
+    }
+    return `Q${num}`
+  }
+
+  // 解答欄追加時にダイアログを表示
+  const handleAddAnswerBox = () => {
+    setShowAnswerLabelDialog(true)
+  }
+  
+  // 選択したラベルで解答欄を追加
+  const addAnswerBoxWithLabel = (label: string) => {
+    const newElement: EditorElement = {
+      id: generateId(),
+      type: 'answer-box',
+      content: label,
+      answer: '',
+      importantPoint: ''
+    }
+    
+    const newElements = [...elements, newElement]
+    setElements(newElements)
+    saveToHistory(newElements)
+    setSelectedElement(newElement.id)
+    lastAddedElementRef.current = newElement.id
+    setShowAnswerLabelDialog(false)
+  }
+
   const addElement = useCallback((type: ElementType) => {
+    // 解答欄の場合はダイアログを表示
+    if (type === 'answer-box') {
+      setShowAnswerLabelDialog(true)
+      return
+    }
+    
     const newElement: EditorElement = {
       id: generateId(),
       type,
       content: getDefaultContent(type, katakanaIndex),
-      ...(type === 'answer-box' && { answer: '', importantPoint: '' }),
       ...(type === 'image' && { imageUrl: '' }),
       ...(type === 'map' && { mapPins: [] }),
       ...(type === 'embed' && { embedHtml: '' })
@@ -307,9 +360,130 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
   }
 
   const handlePrint = () => {
-    // TODO: 実際の印刷機能を実装
-    console.log('印刷:', printWithAnswers ? '答え含む' : '答え含まない')
+    // 印刷用のHTMLを生成
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('ポップアップがブロックされました。印刷を許可してください。')
+      return
+    }
+    
+    const printContent = generatePrintHTML(
+      title || '無題の課題',
+      description,
+      elements,
+      printWithAnswers,
+      printWithImportantPoints
+    )
+    
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+    
+    // 印刷ダイアログを表示
+    setTimeout(() => {
+      printWindow.print()
+    }, 250)
+    
     setShowPrintDialog(false)
+  }
+  
+  // 印刷用HTMLを生成する関数
+  const generatePrintHTML = (
+    title: string,
+    description: string,
+    elements: EditorElement[],
+    showAnswers: boolean,
+    showImportantPoints: boolean
+  ): string => {
+    const elementsHTML = elements.map(el => {
+      switch (el.type) {
+        case 'heading':
+          return `<h2 class="print-heading">${escapeHTML(el.content)}</h2>`
+        case 'text':
+          return `<p class="print-question">${escapeHTML(el.content)}</p>`
+        case 'question-label':
+          return `<p class="print-question" style="font-weight: 600;">${escapeHTML(el.content)}</p>`
+        case 'answer-box':
+          const answerHTML = showAnswers && el.answer 
+            ? `<span class="print-answer-text">${escapeHTML(el.answer)}</span>`
+            : '<span style="display: inline-block; width: 150px; border-bottom: 1px solid #000;"></span>'
+          const importantHTML = showImportantPoints && el.importantPoint
+            ? `<div class="print-important-point">※ ${escapeHTML(el.importantPoint)}</div>`
+            : ''
+          return `
+            <div class="print-answer-box print-no-break">
+              <span class="print-answer-label">${escapeHTML(el.content)}:</span>
+              ${answerHTML}
+              ${importantHTML}
+            </div>
+          `
+        case 'divider':
+          return '<hr class="print-divider" />'
+        case 'image':
+          if (el.imageUrl) {
+            const width = el.style?.width ? `width: ${el.style.width}%;` : 'max-width: 100%;'
+            return `<img src="${el.imageUrl}" class="print-image" style="${width}" alt="画像" />`
+          }
+          return ''
+        default:
+          return ''
+      }
+    }).join('\n')
+    
+    return `
+      <!DOCTYPE html>
+      <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHTML(title)}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif; 
+            font-size: 12pt; 
+            line-height: 1.6;
+            padding: 1cm;
+          }
+          .print-title { font-size: 20pt; font-weight: bold; margin-bottom: 0.5cm; text-align: center; }
+          .print-description { font-size: 11pt; margin-bottom: 1cm; color: #333; }
+          .print-heading { font-size: 14pt; font-weight: bold; margin: 0.8cm 0 0.3cm 0; }
+          .print-question { font-size: 12pt; margin: 0.3cm 0; }
+          .print-answer-box { 
+            border: 1pt solid #ccc; 
+            padding: 0.4cm; 
+            margin: 0.3cm 0; 
+            border-radius: 4px;
+            background: #fafafa;
+          }
+          .print-answer-label { font-weight: bold; margin-right: 0.3cm; }
+          .print-answer-text { color: #cc0000; font-weight: bold; }
+          .print-important-point { color: #0066cc; font-size: 10pt; margin-top: 0.2cm; }
+          .print-divider { border: none; border-top: 1px solid #ddd; margin: 0.5cm 0; }
+          .print-image { max-width: 100%; height: auto; margin: 0.3cm 0; }
+          .print-no-break { page-break-inside: avoid; }
+          @media print {
+            body { padding: 0; }
+            .print-answer-box { background: white; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1 class="print-title">${escapeHTML(title)}</h1>
+        ${description ? `<p class="print-description">${escapeHTML(description)}</p>` : ''}
+        ${elementsHTML}
+      </body>
+      </html>
+    `
+  }
+  
+  // HTMLエスケープ用関数
+  const escapeHTML = (str: string): string => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+      .replace(/\n/g, '<br>')
   }
 
   return (
@@ -412,7 +586,35 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 </motion.div>
               ))}
 
-
+              {/* レイアウトモード切り替え */}
+              <div className="pt-4 mt-4 border-t">
+                <Label className="text-sm text-muted-foreground mb-2 block">レイアウトモード</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={layoutMode === 'linear' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => setLayoutMode('linear')}
+                  >
+                    <Layout className="w-4 h-4" />
+                    リニア
+                  </Button>
+                  <Button
+                    variant={layoutMode === 'freeform' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => setLayoutMode('freeform')}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    自由
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {layoutMode === 'linear' 
+                    ? '要素を上から下へ順番に配置' 
+                    : '要素を自由に配置・移動可能'}
+                </p>
+              </div>
             </CardContent>
           </Card>
         </motion.aside>
@@ -457,7 +659,7 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
               {elements.length === 0 ? (
                 <div className={`flex flex-col items-center justify-center h-96 text-muted-foreground rounded-xl transition-colors ${isDraggingElement ? 'bg-primary/5' : ''}`}>
                   <Plus className="w-12 h-12 mb-4" />
-                  <p>{isDraggingElement ? 'ここにドロップして追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
+                  <p>{isDraggingElement ? 'ここにドロップし��追加' : '左のパネルから要素を追加、またはドラッグ'}</p>
                 </div>
               ) : (
                 <Reorder.Group
@@ -694,6 +896,9 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
         <DialogContent>
           <DialogHeader>
             <DialogTitle>印刷オプション</DialogTitle>
+            <DialogDescription>
+              印刷に含める内容を選択してください
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex items-center space-x-2">
@@ -703,6 +908,21 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
                 onCheckedChange={(checked) => setPrintWithAnswers(checked as boolean)}
               />
               <Label htmlFor="print-answers">答えを含めて印刷する</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="print-important-points"
+                checked={printWithImportantPoints}
+                onCheckedChange={(checked) => setPrintWithImportantPoints(checked as boolean)}
+              />
+              <Label htmlFor="print-important-points">重要ポイントを含めて印刷する</Label>
+            </div>
+            <div className="pt-2 border-t">
+              <p className="text-sm text-muted-foreground">
+                プレビュー: {elements.filter(e => e.type === 'answer-box').length}問の解答欄
+                {printWithAnswers && '（答え付き）'}
+                {printWithImportantPoints && '（解説付き）'}
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -743,6 +963,106 @@ export function AssignmentEditor({ assignmentId, onBack }: AssignmentEditorProps
             <Button onClick={handleSaveTemplate} disabled={!templateName}>
               <Save className="w-4 h-4 mr-2" />
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 解答欄ラベル選択ダイアログ */}
+      <Dialog open={showAnswerLabelDialog} onOpenChange={setShowAnswerLabelDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>解答欄のラベルを選択</DialogTitle>
+            <DialogDescription>
+              解答欄に表示するラベルを選んでください
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {/* カタカナ選択 */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">カタカナ（ア、イ、ウ...）</Label>
+              <div className="flex flex-wrap gap-2">
+                {KATAKANA_MARKERS.slice(0, 20).map((marker) => {
+                  const isUsed = usedLabels.includes(marker)
+                  return (
+                    <Button
+                      key={marker}
+                      variant={isUsed ? 'outline' : 'secondary'}
+                      size="sm"
+                      className={`w-9 h-9 ${isUsed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      onClick={() => !isUsed && addAnswerBoxWithLabel(marker)}
+                      disabled={isUsed}
+                    >
+                      {marker}
+                    </Button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                次におすすめ: <Badge variant="outline" className="ml-1">{nextKatakanaLabel}</Badge>
+              </p>
+            </div>
+
+            {/* 問題番号選択 */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">問題番号（Q1、Q2...）</Label>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 10 }, (_, i) => `Q${i + 1}`).map((label) => {
+                  const isUsed = usedLabels.includes(label)
+                  return (
+                    <Button
+                      key={label}
+                      variant={isUsed ? 'outline' : 'secondary'}
+                      size="sm"
+                      className={`px-3 h-9 ${isUsed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      onClick={() => !isUsed && addAnswerBoxWithLabel(label)}
+                      disabled={isUsed}
+                    >
+                      {label}
+                    </Button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                次におすすめ: <Badge variant="outline" className="ml-1">{getNextNumberLabel()}</Badge>
+              </p>
+            </div>
+
+            {/* カスタム入力 */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">カスタムラベル</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="例: 問1、(ア)、答え"
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const input = e.currentTarget
+                      if (input.value.trim()) {
+                        addAnswerBoxWithLabel(input.value.trim())
+                        input.value = ''
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  variant="default"
+                  onClick={(e) => {
+                    const input = e.currentTarget.previousElementSibling as HTMLInputElement
+                    if (input.value.trim()) {
+                      addAnswerBoxWithLabel(input.value.trim())
+                      input.value = ''
+                    }
+                  }}
+                >
+                  追加
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAnswerLabelDialog(false)}>
+              キャンセル
             </Button>
           </DialogFooter>
         </DialogContent>

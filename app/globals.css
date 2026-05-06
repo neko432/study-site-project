@@ -245,3 +245,95 @@
     opacity: 0.7;
   }
 }
+
+/* 印刷用スタイル */
+@media print {
+  /* 印刷時に非表示にする要素 */
+  .no-print,
+  header,
+  aside,
+  nav,
+  button:not(.print-visible),
+  .dialog-overlay,
+  [role="dialog"] {
+    display: none !important;
+  }
+  
+  /* 印刷時のレイアウト調整 */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+  
+  .print-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 1cm !important;
+  }
+  
+  /* 見出しスタイル */
+  .print-heading {
+    font-size: 18pt !important;
+    font-weight: bold !important;
+    margin-bottom: 0.5cm !important;
+  }
+  
+  /* 問題文スタイル */
+  .print-question {
+    font-size: 12pt !important;
+    margin-bottom: 0.3cm !important;
+  }
+  
+  /* 解答欄スタイル */
+  .print-answer-box {
+    border: 1pt solid black !important;
+    padding: 0.3cm !important;
+    margin: 0.2cm 0 !important;
+    background: white !important;
+  }
+  
+  .print-answer-label {
+    font-weight: bold !important;
+    display: inline-block !important;
+    margin-right: 0.3cm !important;
+  }
+  
+  /* 答えを表示する場合 */
+  .print-answer-text {
+    color: #cc0000 !important;
+    font-weight: bold !important;
+  }
+  
+  /* 重要ポイントを表示する場合 */
+  .print-important-point {
+    color: #0066cc !important;
+    font-size: 10pt !important;
+    font-style: italic !important;
+    margin-top: 0.1cm !important;
+  }
+  
+  /* 区切り線 */
+  .print-divider {
+    border-top: 1pt solid #ccc !important;
+    margin: 0.5cm 0 !important;
+  }
+  
+  /* 画像サイズ調整 */
+  .print-image {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+  }
+  
+  /* ページ区切り制御 */
+  .print-page-break {
+    page-break-before: always !important;
+  }
+  
+  .print-no-break {
+    page-break-inside: avoid !important;
+  }
+}

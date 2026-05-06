@@ -7,7 +7,9 @@ import type {
   Assignment, 
   AssignmentTemplate, 
   StudentSubmission, 
-  EditorElement 
+  EditorElement,
+  ElementGroup,
+  LayoutMode
 } from './types'
 
 interface AppState {
@@ -20,6 +22,9 @@ interface AppState {
   assignments: Assignment[]
   templates: AssignmentTemplate[]
   currentEditor: EditorElement[]
+  currentElementGroups: ElementGroup[]
+  currentLayoutMode: LayoutMode
+  selectedElementIds: string[]
   
   // 生徒用
   submissions: StudentSubmission[]
@@ -48,6 +53,21 @@ interface AppState {
   addElement: (element: EditorElement) => void
   updateElement: (id: string, element: Partial<EditorElement>) => void
   deleteElement: (id: string) => void
+  moveElement: (id: string, direction: 'up' | 'down') => void
+  
+  // レイアウトモード
+  setLayoutMode: (mode: LayoutMode) => void
+  
+  // 要素選択
+  setSelectedElementIds: (ids: string[]) => void
+  toggleElementSelection: (id: string) => void
+  clearSelection: () => void
+  
+  // グループ管理
+  setElementGroups: (groups: ElementGroup[]) => void
+  createGroup: (elementIds: string[], layout?: 'row' | 'column') => void
+  ungroupElements: (groupId: string) => void
+  updateGroup: (groupId: string, updates: Partial<ElementGroup>) => void
   
   // 提出管理
   addSubmission: (submission: StudentSubmission) => void
@@ -168,6 +188,9 @@ export const useAppStore = create<AppState>()(
       assignments: sampleAssignments,
       templates: [],
       currentEditor: [],
+      currentElementGroups: [],
+      currentLayoutMode: 'linear' as LayoutMode,
+      selectedElementIds: [],
       submissions: [],
       currentStudentId: 'student-1',
       studentName: '',
@@ -220,7 +243,80 @@ export const useAppStore = create<AppState>()(
         })),
       deleteElement: (id) =>
         set((state) => ({
-          currentEditor: state.currentEditor.filter((e) => e.id !== id)
+          currentEditor: state.currentEditor.filter((e) => e.id !== id),
+          // グループからも削除
+          currentElementGroups: state.currentElementGroups
+            .map((g) => ({
+              ...g,
+              elementIds: g.elementIds.filter((eid) => eid !== id)
+            }))
+            .filter((g) => g.elementIds.length > 0)
+        })),
+      
+      // 要素の移動
+      moveElement: (id, direction) =>
+        set((state) => {
+          const index = state.currentEditor.findIndex((e) => e.id === id)
+          if (index === -1) return state
+          if (direction === 'up' && index === 0) return state
+          if (direction === 'down' && index === state.currentEditor.length - 1) return state
+          
+          const newElements = [...state.currentEditor]
+          const swapIndex = direction === 'up' ? index - 1 : index + 1
+          ;[newElements[index], newElements[swapIndex]] = [newElements[swapIndex], newElements[index]]
+          return { currentEditor: newElements }
+        }),
+      
+      // レイアウトモード
+      setLayoutMode: (mode) => set({ currentLayoutMode: mode }),
+      
+      // 要素選択
+      setSelectedElementIds: (ids) => set({ selectedElementIds: ids }),
+      toggleElementSelection: (id) =>
+        set((state) => ({
+          selectedElementIds: state.selectedElementIds.includes(id)
+            ? state.selectedElementIds.filter((eid) => eid !== id)
+            : [...state.selectedElementIds, id]
+        })),
+      clearSelection: () => set({ selectedElementIds: [] }),
+      
+      // グループ管理
+      setElementGroups: (groups) => set({ currentElementGroups: groups }),
+      createGroup: (elementIds, layout = 'row') =>
+        set((state) => {
+          const groupId = `group-${Date.now()}`
+          const newGroup: ElementGroup = {
+            id: groupId,
+            elementIds,
+            layout,
+            gap: 8
+          }
+          // 要素にgroupIdを設定
+          const updatedElements = state.currentEditor.map((e) =>
+            elementIds.includes(e.id) ? { ...e, groupId } : e
+          )
+          return {
+            currentElementGroups: [...state.currentElementGroups, newGroup],
+            currentEditor: updatedElements,
+            selectedElementIds: []
+          }
+        }),
+      ungroupElements: (groupId) =>
+        set((state) => {
+          // 要素からgroupIdを削除
+          const updatedElements = state.currentEditor.map((e) =>
+            e.groupId === groupId ? { ...e, groupId: undefined } : e
+          )
+          return {
+            currentElementGroups: state.currentElementGroups.filter((g) => g.id !== groupId),
+            currentEditor: updatedElements
+          }
+        }),
+      updateGroup: (groupId, updates) =>
+        set((state) => ({
+          currentElementGroups: state.currentElementGroups.map((g) =>
+            g.id === groupId ? { ...g, ...updates } : g
+          )
         })),
       
       // 提出管理
